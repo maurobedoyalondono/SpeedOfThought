@@ -26,7 +26,9 @@ class PlayerBot {
             lastFuel: 100,
             currentLap: 1,
             changingLane: false,
-            lastAction: null
+            lastAction: null,
+            refuelingStartFuel: null,  // Track fuel when entering zone
+            refuelingTicks: 0          // Track time spent refueling
         };
 
         this.strategy = "balanced";
@@ -110,16 +112,28 @@ class PlayerBot {
             return;
         }
 
-        // LANE OPTIMIZATION: Prefer inner lane when safe
-        if (this.shouldMoveToInnerLane(state)) {
+        // FUEL MANAGEMENT: Smart refueling strategy (BEFORE lane optimization)
+        // Check fuel needs more intelligently - not just at low fuel
+        const lapsRemaining = state.track.totalLaps - state.car.lap + 1;
+        const avgFuelPerLap = this.getAverageFuelPerLap();
+        const fuelNeeded = avgFuelPerLap * lapsRemaining;
+
+        // Be proactive about fuel - don't wait until too low
+        // Also check if we're in lane 0 and need fuel (fuel is only in lanes 1-2)
+        if (state.car.fuel < fuelNeeded * 1.3 ||
+            (state.car.fuel < 60 && state.track.ahead[0] && state.track.ahead[0].type === 'fuel_zone') ||
+            (state.car.fuel < fuelNeeded * 1.5 && state.car.lane === 0)) {
+            if (this.needsFuel(state, car)) {
+                return; // Action taken in needsFuel
+            }
+        }
+
+        // LANE OPTIMIZATION: Only prefer inner lane if we have enough fuel
+        // Don't go to inner lane if we might need fuel soon (fuel is in lanes 1-2)
+        if (state.car.fuel > avgFuelPerLap * 2 && this.shouldMoveToInnerLane(state)) {
             car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
             this.state.lastAction = 'optimizing_lane';
             return;
-        }
-
-        // FUEL MANAGEMENT: Find fuel if needed
-        if (state.car.fuel < 40 && this.needsFuel(state, car)) {
-            return; // Action taken in needsFuel
         }
 
         // SPEED CONTROL: Optimal racing speed
@@ -386,13 +400,129 @@ class PlayerBot {
     }
 
     needsFuel(state, car) {
-        // Look for fuel zones
-        for (let i = 0; i < state.track.ahead.length; i++) {
-            if (state.track.ahead[i].type === 'fuel_zone') {
-                // Coast to save fuel getting there
-                car.executeAction(CAR_ACTIONS.COAST);
-                this.state.lastAction = 'seeking_fuel';
+        // Calculate how much fuel we need to finish
+        const lapsRemaining = state.track.totalLaps - state.car.lap + 1;
+        const avgFuelPerLap = this.getAverageFuelPerLap();
+        const fuelNeeded = avgFuelPerLap * lapsRemaining;
+
+        // Constants for refueling (from game.js physics)
+        const REFUEL_RATE = 0.8; // Liters per tick
+        const REFUEL_PER_SECOND = REFUEL_RATE * 60; // 48 L/second
+
+        // Check if we're currently IN a fuel zone
+        if (state.track.ahead[0] && state.track.ahead[0].type === 'fuel_zone') {
+            // Track refueling progress
+            if (this.state.refuelingStartFuel === null) {
+                this.state.refuelingStartFuel = state.car.fuel;
+                this.state.refuelingTicks = 0;
+            }
+            this.state.refuelingTicks++;
+
+            // Calculate target fuel level based on race situation
+            let targetFuel;
+            if (lapsRemaining === 1) {
+                // Last lap - just need enough to finish
+                targetFuel = Math.min(fuelNeeded * 1.2, 100);
+            } else if (lapsRemaining === 2) {
+                // Two laps left - try to get enough for both if possible
+                targetFuel = Math.min(fuelNeeded * 1.1, 100);
+            } else {
+                // Multiple laps - get at least one full lap + safety margin
+                targetFuel = Math.min(Math.max(avgFuelPerLap * 1.5, fuelNeeded * 0.6), 100);
+            }
+
+            // Calculate how much fuel we've gained
+            const fuelGained = state.car.fuel - this.state.refuelingStartFuel;
+            const fuelGainRate = fuelGained / this.state.refuelingTicks; // L/tick actual rate
+
+            // We're IN a fuel zone - should we stay?
+            if (state.car.fuel < targetFuel - 10) {
+                // Still need significant fuel - BRAKE hard to maximize refuel time
+                car.executeAction(CAR_ACTIONS.BRAKE);
+                this.state.lastAction = 'refueling_brake';
                 return true;
+            } else if (state.car.fuel < targetFuel - 2) {
+                // Almost there - coast through to top off
+                car.executeAction(CAR_ACTIONS.COAST);
+                this.state.lastAction = 'refueling_coast';
+                return true;
+            } else {
+                // We have enough fuel - exit refueling mode
+                this.state.refuelingStartFuel = null;
+                this.state.refuelingTicks = 0;
+                // Continue with normal racing
+            }
+        } else {
+            // Not in fuel zone - reset refueling tracking
+            if (this.state.refuelingStartFuel !== null) {
+                this.state.refuelingStartFuel = null;
+                this.state.refuelingTicks = 0;
+            }
+        }
+
+        // Look for upcoming fuel zones if we need fuel
+        if (state.car.fuel < fuelNeeded * 1.3) {
+            for (let i = 0; i < Math.min(10, state.track.ahead.length); i++) {
+                if (state.track.ahead[i].type === 'fuel_zone') {
+                    // Check if the fuel zone has fuel in our lane or adjacent lanes
+                    if (state.track.ahead[i].items) {
+                        for (let item of state.track.ahead[i].items) {
+                            if (item.type === 'fuel' && item.lanes) {
+                                // If fuel is in our lane, coast to save fuel getting there
+                                if (item.lanes.includes(state.car.lane)) {
+                                    if (i === 0) {
+                                        // Already in fuel zone - handled above
+                                        continue;
+                                    }
+                                    car.executeAction(CAR_ACTIONS.COAST);
+                                    this.state.lastAction = 'approaching_fuel';
+                                    return true;
+                                }
+
+                                // Fuel is NOT in our lane - must change lanes!
+                                // Fuel is only in lanes 1-2, never in lane 0
+                                if (!item.lanes.includes(state.car.lane) && i <= 5) {
+                                    // Find the closest lane with fuel
+                                    let targetLane = null;
+                                    let minDist = 3;
+                                    for (let lane of item.lanes) {
+                                        const dist = Math.abs(lane - state.car.lane);
+                                        if (dist < minDist) {
+                                            minDist = dist;
+                                            targetLane = lane;
+                                        }
+                                    }
+
+                                    // Change to the target lane for fuel
+                                    if (targetLane !== null && targetLane !== state.car.lane) {
+                                        // Check for obstacles first
+                                        let safe = true;
+                                        for (let j = 0; j <= Math.min(i, 2); j++) {
+                                            if (state.track.ahead[j].obstacles) {
+                                                for (let obs of state.track.ahead[j].obstacles) {
+                                                    if (obs.lane === targetLane) {
+                                                        safe = false;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if (safe) {
+                                            if (targetLane < state.car.lane) {
+                                                car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                                            } else {
+                                                car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                                            }
+                                            this.state.lastAction = 'moving_to_fuel';
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         return false;
