@@ -905,8 +905,14 @@ class PhysicsEngine {
             const dragForce = this.calculateDrag(car);
             const rollingResistance = this.calculateRollingResistance(car);
 
+            // When fuel is empty, add extra deceleration force
+            let fuelEmptyForce = 0;
+            if (car.fuel <= 0) {
+                fuelEmptyForce = 500; // Extra resistance when engine dies
+            }
+
             // Net force and acceleration (F = ma, so a = F/m)
-            const netForce = engineForce - dragForce - rollingResistance;
+            const netForce = engineForce - dragForce - rollingResistance - fuelEmptyForce;
             const acceleration = netForce / this.CAR_MASS;
 
             // Update velocity (v = v0 + at)
@@ -914,6 +920,12 @@ class PhysicsEngine {
 
             // Cars can't go backwards
             car.speed = Math.max(0, car.speed);
+
+            // When fuel is empty and speed is very low, stop completely
+            if (car.fuel <= 0 && car.speed < 10) {
+                car.speed = 0;
+                car.stopped = true;
+            }
 
             // Update position based on speed
             this.updatePosition(car, newState.track, deltaTime);
@@ -935,10 +947,12 @@ class PhysicsEngine {
     }
 
     calculateEngineForce(car, action) {
-        // No fuel = no engine force, but momentum continues!
+        // No fuel = no engine force
         if (car.fuel <= 0) {
+            car.engineOff = true;
             return 0;
         }
+        car.engineOff = false;
 
         const baseForce = {
             'ACCELERATE': 3000,    // Newtons
@@ -974,7 +988,14 @@ class PhysicsEngine {
     calculateRollingResistance(car) {
         // Rolling resistance = Crr * m * g
         const gravity = 9.81;
-        return this.ROLLING_RESISTANCE * this.CAR_MASS * gravity * car.tireWear;
+        let resistance = this.ROLLING_RESISTANCE * this.CAR_MASS * gravity * car.tireWear;
+
+        // When engine is off, resistance increases significantly
+        if (car.engineOff || car.fuel <= 0) {
+            resistance *= 3.0; // Triple resistance when engine off (no power steering/brakes)
+        }
+
+        return resistance;
     }
 
     calculateDrafting(car, opponent) {
@@ -1148,9 +1169,13 @@ class PhysicsEngine {
                     if (Math.abs(car.lane - obstacle.lane) < 0.5) {
                         // Check if we've already hit this obstacle
                         if (!car.hitObstacles) car.hitObstacles = [];
-                        const obstacleId = `${segmentIndex}_${index}`;
+                        const obstacleId = `${segmentIndex}_${index}_${obstacle.lane}`; // More unique ID
 
-                        if (!car.hitObstacles.includes(obstacleId)) {
+                        // Check collision cooldown to prevent missing consecutive obstacles
+                        const canCollide = !car.lastCollisionTime ||
+                                         (this.tick - car.lastCollisionTime) > 5; // 5 tick cooldown
+
+                        if (!car.hitObstacles.includes(obstacleId) && canCollide) {
                             // COLLISION! Car hits obstacle
                             car.speed *= 0.3; // Massive speed reduction
                             car.fuel -= 5; // Damage penalty
@@ -1163,6 +1188,12 @@ class PhysicsEngine {
 
                             // Mark obstacle as hit (car has crashed through it)
                             car.hitObstacles.push(obstacleId);
+                            car.lastCollisionTime = this.tick;
+
+                            // Clear old hit obstacles to prevent memory buildup
+                            if (car.hitObstacles.length > 20) {
+                                car.hitObstacles = car.hitObstacles.slice(-10);
+                            }
 
                             // No lane change - just keep going straight
                             console.log(`CRASH! Car hit obstacle but keeps lane ${car.lane}`);
@@ -1203,6 +1234,11 @@ class PhysicsEngine {
             if (car.speed > 50) {
                 car.speed -= 2; // Gradual slowdown while stunned
             }
+        }
+
+        // If car has stopped due to no fuel, it stays stopped
+        if (car.stopped && car.fuel <= 0) {
+            car.speed = 0;
         }
     }
 
@@ -1272,7 +1308,10 @@ class Renderer {
         this.animationFrame = 0;
     }
 
-    draw(gameState) {
+    draw(gameState, totalLaps = 5) {
+        // Store totalLaps for use in drawCar
+        this.totalLaps = totalLaps;
+
         // Clear canvas
         this.ctx.fillStyle = '#0a0a0a';
         this.ctx.fillRect(0, 0, this.width, this.height);
@@ -1489,6 +1528,20 @@ class Renderer {
         ctx.textAlign = 'center';
         ctx.fillText(label, 0, 3);
 
+        ctx.restore();
+
+        // Draw lap counter above the car
+        ctx.save();
+        ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        const lapText = `${car.lap}/${this.totalLaps || 5}`;
+
+        // Draw text with black outline for visibility
+        ctx.strokeText(lapText, coords.x, coords.y - jumpOffset - 35);
+        ctx.fillText(lapText, coords.x, coords.y - jumpOffset - 35);
         ctx.restore();
 
         // Drafting effect - intensity based on effectiveness
@@ -1846,7 +1899,7 @@ class RaceEngine {
         }
 
         // Render
-        this.renderer.draw(this.gameState);
+        this.renderer.draw(this.gameState, this.totalLaps);
 
         // Update UI
         this.updateUI();
@@ -2302,7 +2355,7 @@ class PlayerBot {
 
         // Redraw initial state
         if (this.raceEngine.renderer) {
-            this.raceEngine.renderer.draw(this.raceEngine.gameState);
+            this.raceEngine.renderer.draw(this.raceEngine.gameState, this.raceEngine.totalLaps);
         }
 
         // Clear action log
