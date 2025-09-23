@@ -1002,48 +1002,9 @@ class Renderer {
         ctx.strokeText(lapText, coords.x, coords.y - jumpOffset - 35);
         ctx.fillText(lapText, coords.x, coords.y - jumpOffset - 35);
         ctx.restore();
-
-        // Drafting effect - intensity based on effectiveness
-        if (car.isDrafting) {
-            const opacity = 0.3 + (car.draftEffectiveness * 0.7); // 30% to 100% opacity
-            ctx.strokeStyle = `rgba(0, 255, 0, ${opacity})`;
-            ctx.lineWidth = 1 + (car.draftEffectiveness * 2); // 1 to 3 line width
-            ctx.setLineDash([5, 5]);
-            ctx.strokeRect(coords.x - 20, coords.y - 25, 40, 50);
-            ctx.setLineDash([]);
-        }
-
-        // Boost trail
-        if (car.lastAction === CAR_ACTIONS.BOOST || car.lastAction === CAR_ACTIONS.SPRINT) {
-            this.drawBoostTrail(coords.x, coords.y, rotation, color);
-        }
     }
 
-    drawBoostTrail(x, y, rotation, color) {
-        const ctx = this.ctx;
-
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(rotation);
-
-        // Create gradient for trail
-        const gradient = ctx.createLinearGradient(0, 20, 0, 60);
-        gradient.addColorStop(0, color);
-        gradient.addColorStop(0.5, 'rgba(255,255,0,0.5)');
-        gradient.addColorStop(1, 'transparent');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.moveTo(-5, 20);
-        ctx.lineTo(-10, 60);
-        ctx.lineTo(0, 55);
-        ctx.lineTo(10, 60);
-        ctx.lineTo(5, 20);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.restore();
-    }
+    // Removed legacy drawBoostTrail (old light cone effect) as new state effects handle boosting visuals
 
     getCarState(car) {
         // Determine the current state of the car for visual effects
