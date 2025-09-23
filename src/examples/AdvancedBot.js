@@ -28,7 +28,10 @@ class PlayerBot {
             changingLane: false,
             lastAction: null,
             refuelingStartFuel: null,  // Track fuel when entering zone
-            refuelingTicks: 0          // Track time spent refueling
+            refuelingTicks: 0,         // Track time spent refueling
+            stuckBehindTicks: 0,       // Track how long stuck behind opponent
+            lastOpponentDistance: null, // Track opponent distance changes
+            stuckThreshold: 90         // Ticks before considering stuck (1.5 seconds)
         };
 
         this.strategy = "balanced";
@@ -41,7 +44,25 @@ class PlayerBot {
         // Update memory systems
         this.updateMemory(state);
 
-        // CRITICAL PRIORITY 1: NEVER HIT OBSTACLES
+        // Track if stuck behind opponent
+        this.trackStuckBehind(state);
+
+        // CRITICAL PRIORITY 1: Unstuck maneuver if trapped behind opponent
+        if (this.isStuckBehind(state)) {
+            const overtakeLane = this.findOvertakeLane(state);
+            if (overtakeLane !== null && overtakeLane !== state.car.lane) {
+                if (overtakeLane < state.car.lane) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                } else {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                }
+                this.state.lastAction = 'unstuck_overtake';
+                this.state.stuckBehindTicks = 0; // Reset stuck counter
+                return;
+            }
+        }
+
+        // CRITICAL PRIORITY 2: NEVER HIT OBSTACLES
         // Check immediate danger (next segment)
         if (this.mustAvoidObstacle(state)) {
             const safeLane = this.findSafestLane(state);
@@ -56,7 +77,7 @@ class PlayerBot {
             }
         }
 
-        // PRIORITY 2: Prepare for upcoming obstacles (look ahead)
+        // PRIORITY 3: Prepare for upcoming obstacles (look ahead)
         const futureObstacle = this.scanForObstacles(state, 3);
         if (futureObstacle && futureObstacle.distance <= 1) {
             const optimalLane = this.planOptimalPath(state, futureObstacle);
@@ -74,7 +95,7 @@ class PlayerBot {
             this.state.changingLane = false;
         }
 
-        // PRIORITY 3: Grab nearby boost pads (but ONLY if safe!)
+        // PRIORITY 4: Grab nearby boost pads (but ONLY if safe!)
         const boostChance = this.findSafeBoostPad(state);
         if (boostChance && boostChance.worth_it) {
             if (boostChance.lane < state.car.lane) {
@@ -176,6 +197,99 @@ class PlayerBot {
         if (this.memory.opponentBehavior.length > 180) {
             this.memory.opponentBehavior.shift();
         }
+    }
+
+    trackStuckBehind(state) {
+        const gap = state.opponent.distance;
+        const inSameLane = state.opponent.lane === state.car.lane;
+        const closeBehind = gap > 0 && gap < 8; // Very close behind (within 8m)
+
+        // Check if we're stuck: same lane, close behind, and not making progress
+        if (inSameLane && closeBehind) {
+            // Check if distance hasn't improved
+            if (this.state.lastOpponentDistance !== null) {
+                const distanceChange = gap - this.state.lastOpponentDistance;
+                // If we're not getting closer or getting further behind, increment stuck counter
+                if (distanceChange >= -0.5) { // Not gaining significantly
+                    this.state.stuckBehindTicks++;
+                } else {
+                    // We're gaining on opponent, reset counter
+                    this.state.stuckBehindTicks = Math.max(0, this.state.stuckBehindTicks - 5);
+                }
+            }
+        } else {
+            // Not in stuck situation, reset counter gradually
+            this.state.stuckBehindTicks = Math.max(0, this.state.stuckBehindTicks - 3);
+        }
+
+        this.state.lastOpponentDistance = gap;
+    }
+
+    isStuckBehind(state) {
+        return this.state.stuckBehindTicks > this.state.stuckThreshold;
+    }
+
+    findOvertakeLane(state) {
+        const currentLane = state.car.lane;
+        const opponentLane = state.opponent.lane;
+        const lanes = [0, 1, 2];
+        
+        // Get available lanes (not current lane and not opponent's lane)
+        const availableLanes = lanes.filter(lane => 
+            lane !== currentLane && lane !== opponentLane
+        );
+
+        // Score each available lane for overtaking
+        let bestLane = null;
+        let bestScore = -999;
+
+        for (let lane of availableLanes) {
+            let score = 0;
+
+            // Check if lane is clear for next 5 segments (overtaking space)
+            let clear = true;
+            for (let i = 0; i < Math.min(5, state.track.ahead.length); i++) {
+                if (state.track.ahead[i].obstacles) {
+                    for (let obs of state.track.ahead[i].obstacles) {
+                        if (obs.lane === lane) {
+                            clear = false;
+                            break;
+                        }
+                    }
+                }
+                if (!clear) break;
+            }
+            
+            if (!clear) continue;
+
+            // Prefer inner lanes (shorter distance) but not too strongly when overtaking
+            score += (2 - lane) * 2;
+
+            // Prefer lanes closer to current position to minimize lane changes
+            score -= Math.abs(lane - currentLane) * 3;
+
+            // Bonus for overtaking on the left (traditional racing)
+            if (lane < opponentLane) {
+                score += 5;
+            }
+
+            // Consider fuel zones - avoid changing to lanes without fuel if we need fuel soon
+            const lapsRemaining = state.track.totalLaps - state.car.lap + 1;
+            const avgFuelPerLap = this.getAverageFuelPerLap();
+            const fuelNeeded = avgFuelPerLap * lapsRemaining;
+            
+            if (state.car.fuel < fuelNeeded * 1.4 && lane === 0) {
+                // Lane 0 has no fuel, penalize if we might need fuel
+                score -= 8;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestLane = lane;
+            }
+        }
+
+        return bestLane;
     }
 
     mustAvoidObstacle(state) {
@@ -347,8 +461,12 @@ class PlayerBot {
             // Calculate effectiveness
             const effectiveness = 1 - ((gap - 5) / 20);
 
-            // Only change lanes for good drafting
-            if (effectiveness > 0.4 && state.opponent.lane !== state.car.lane) {
+            // Only change lanes for good drafting, but avoid if too close
+            // Let the stuck detection handle very close situations
+            if (effectiveness > 0.4 && 
+                state.opponent.lane !== state.car.lane && 
+                gap > 8) { // Don't draft if too close - let overtake logic handle it
+                
                 // But check for obstacles first!
                 let safe = true;
                 if (state.track.ahead[0].obstacles) {
@@ -544,13 +662,22 @@ class PlayerBot {
         const finalLap = state.car.lap === state.track.totalLaps;
         const gap = Math.abs(state.opponent.distance);
         const ahead = state.opponent.distance > 0;
+        const justOvertook = this.state.lastAction === 'unstuck_overtake';
 
         // Dynamic speed strategy
         if (finalLap && state.car.fuel > 5) {
             car.executeAction(CAR_ACTIONS.SPRINT);
             this.state.lastAction = 'final_sprint';
-        } else if (state.car.isDrafting && state.car.fuel < 60) {
-            // Drafting saves fuel - use it!
+        } else if (justOvertook && state.car.fuel > 20) {
+            // Just made overtake maneuver - sprint to complete the pass
+            car.executeAction(CAR_ACTIONS.SPRINT);
+            this.state.lastAction = 'overtake_sprint';
+        } else if (this.state.stuckBehindTicks > this.state.stuckThreshold * 0.7 && state.car.fuel > 25) {
+            // Getting close to stuck threshold - be more aggressive
+            car.executeAction(CAR_ACTIONS.SPRINT);
+            this.state.lastAction = 'aggressive_passing';
+        } else if (state.car.isDrafting && state.car.fuel < 60 && gap > 8) {
+            // Drafting saves fuel - use it! But only if not too close
             car.executeAction(CAR_ACTIONS.COAST);
             this.state.lastAction = 'draft_coasting';
         } else if (state.car.fuel < 15) {

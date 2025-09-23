@@ -151,6 +151,8 @@ class TrackGenerator {
         const rng = new SeededRandom(seed);
         const segments = Math.floor(this.trackLength / 10); // 10 meter segments
 
+        console.log(`TrackGenerator: Generating track with ${this.fuelStationCount} fuel stations`);
+
         const track = {
             segments: [],
             lapDistance: this.trackLength,
@@ -169,12 +171,17 @@ class TrackGenerator {
         // Place fuel stations evenly across the track
         const fuelInterval = Math.floor(segments / (actualFuelCount + 1));
         const fuelPositions = [];
+        const fuelLanes = []; // Store the lane for each fuel station
+        
         for (let i = 1; i <= actualFuelCount; i++) {
             // Randomize position a bit for variety
             const basePos = i * fuelInterval;
             const variation = Math.floor((rng.next() - 0.5) * 20); // +/- 10 segments
             const finalPos = Math.max(10, Math.min(segments - 10, basePos + variation));
             fuelPositions.push(finalPos);
+            
+            // Assign ONE lane per fuel station (0, 1, or 2)
+            fuelLanes.push(Math.floor(rng.next() * 3));
         }
 
         // Generate segments
@@ -188,33 +195,26 @@ class TrackGenerator {
             };
 
             // Check if this should be a fuel station (make stations 3 segments long)
-            if (fuelPositions.some(pos => i >= pos && i < pos + 3)) {
+            const fuelStationIndex = fuelPositions.findIndex(pos => i >= pos && i < pos + 3);
+            const isPartOfFuelStation = fuelStationIndex !== -1;
+            const isFirstSegmentOfFuelStation = fuelPositions.includes(i);
+            
+            if (isPartOfFuelStation) {
                 segment.type = 'fuel_zone';
-                // Only place fuel in lanes 1 and 2 (middle and outer lanes) as requested
-                const lanes = [];
-
-                // Randomly decide which of lanes 1 and 2 get fuel
-                if (rng.next() > 0.5) {
-                    lanes.push(1); // Middle lane
-                }
-                if (rng.next() > 0.5) {
-                    lanes.push(2); // Outer lane
-                }
-
-                // Make sure at least one lane has fuel (either 1 or 2)
-                if (lanes.length === 0) {
-                    lanes.push(rng.next() > 0.5 ? 1 : 2);
-                }
+                
+                // Use the pre-assigned lane for this fuel station
+                const assignedLane = fuelLanes[fuelStationIndex];
 
                 segment.items.push({
                     type: 'fuel',
                     amount: 20 + rng.next() * 10,
-                    lanes: lanes
+                    lanes: [assignedLane]  // Use the same lane for all 3 segments
                 });
                 
-                // Only add to fuelStations array once per station (at first segment)
-                if (fuelPositions.includes(i)) {
+                // Only add to fuelStations array once per station (at first segment only)
+                if (isFirstSegmentOfFuelStation) {
                     track.fuelStations.push(i * 10);
+                    console.log(`Adding fuel station at segment ${i}, position ${i * 10}, lane ${assignedLane}`);
                 }
             } else {
                 // Otherwise, generate other features
@@ -248,6 +248,10 @@ class TrackGenerator {
 
             track.segments.push(segment);
         }
+
+        console.log(`TrackGenerator: Requested ${this.fuelStationCount} fuel stations`);
+        console.log(`TrackGenerator: Generated positions:`, fuelPositions.map((pos, i) => `Station ${i+1}: segment ${pos}, lane ${fuelLanes[i]}`));
+        console.log(`TrackGenerator: Final track has ${track.fuelStations.length} fuel stations at positions:`, track.fuelStations);
 
         return track;
     }
@@ -856,17 +860,23 @@ class Renderer {
     drawTrackFeatures(gameState) {
         const track = gameState.track;
 
-        // Draw fuel zones
+        // Draw fuel zones (only draw once per fuel station using the original positions)
         const segmentLength = 10; // Each segment is 10 meters
-        track.segments.forEach((segment, index) => {
-            if (segment.type === 'fuel_zone' && segment.items) {
+        
+        // Use the track.fuelStations array which contains the actual fuel station positions
+        track.fuelStations.forEach(stationPosition => {
+            // Find which segment this fuel station starts at
+            const segmentIndex = Math.floor(stationPosition / segmentLength);
+            const segment = track.segments[segmentIndex];
+            
+            if (segment && segment.type === 'fuel_zone' && segment.items) {
                 segment.items.forEach(item => {
                     if (item.type === 'fuel' && item.lanes) {
-                        // Draw fuel zone in each lane it occupies
+                        // Draw fuel zone in the lane it occupies (only once per station)
                         item.lanes.forEach(lane => {
-                            const position = index * segmentLength;
-                            const coords = this.getTrackCoordinates(position, track.lapDistance, lane);
-                            this.drawFuelZone(coords.x, coords.y);
+                            const coords = this.getTrackCoordinates(stationPosition, track.lapDistance, lane);
+                            // Draw a longer fuel zone that spans 3 segments (30 meters)
+                            this.drawExtendedFuelZone(coords.x, coords.y, stationPosition, track.lapDistance, 3);
                         });
                     }
                 });
@@ -897,6 +907,46 @@ class Renderer {
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('FUEL', x, y + 5);
+    }
+
+    drawExtendedFuelZone(x, y, position, lapDistance, segmentCount) {
+        const ctx = this.ctx;
+        
+        // Calculate the angle for proper rotation
+        const progress = position / lapDistance;
+        const angle = progress * Math.PI * 2 - Math.PI / 2;
+        
+        // Calculate the ACTUAL visual length based on track geometry
+        // Each segment is 10 meters, fuel station spans 3 segments = 30 meters
+        const segmentLength = 10; // meters
+        const fuelStationLength = segmentCount * segmentLength; // 30 meters
+        
+        // Get coordinates for start and end of fuel station to calculate visual length
+        const startCoords = this.getTrackCoordinates(position, lapDistance, 1);
+        const endCoords = this.getTrackCoordinates(position + fuelStationLength, lapDistance, 1);
+        const visualLength = Math.sqrt(
+            Math.pow(endCoords.x - startCoords.x, 2) + 
+            Math.pow(endCoords.y - startCoords.y, 2)
+        );
+        
+        // Keep width appropriate for a single lane
+        const laneWidth = 35;
+        
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle + Math.PI / 2); // Align with track direction
+        
+        // Draw fuel zone with ACTUAL simulation-based length
+        ctx.fillStyle = 'rgba(68, 255, 68, 0.3)';
+        ctx.fillRect(-visualLength/2, -laneWidth/2, visualLength, laneWidth);
+
+        // Draw text in the center
+        ctx.fillStyle = '#44ff44';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('FUEL', 0, 4);
+        
+        ctx.restore();
     }
 
     drawBoostPad(x, y) {
@@ -1664,6 +1714,17 @@ class RaceEngine {
             this.onRaceEnd();
             return;
         }
+
+        // Check if both cars are out of fuel and stationary (both lost condition)
+        const player1OutOfFuel = this.gameState.player1.fuel <= 0 && this.gameState.player1.speed < 5;
+        const player2OutOfFuel = this.gameState.player2.fuel <= 0 && this.gameState.player2.speed < 5;
+        
+        if (player1OutOfFuel && player2OutOfFuel) {
+            this.gameState.race.winner = 'both_lost';
+            this.running = false;
+            this.onRaceEnd();
+            return;
+        }
     }
 
     onRaceEnd() {
@@ -2285,13 +2346,18 @@ class PlayerBot {
         const obstacles = document.getElementById('config-obstacles').value;
         const fuelStations = parseInt(document.getElementById('config-fuel').value);
 
+        console.log(`Applying configuration: ${fuelStations} fuel stations`);
+
         // Update race engine settings
         this.raceEngine.totalLaps = laps;
 
         // Generate new track with settings
         const trackGen = new TrackGenerator();
         trackGen.fuelStationCount = fuelStations;
+        // Make sure the track generator uses the updated fuel station count
         this.raceEngine.track = trackGen.generate(Math.random(), obstacles);
+
+        console.log(`Generated track with ${this.raceEngine.track.fuelStations.length} fuel stations`);
 
         // Reset the race with new settings
         this.resetRace();
@@ -2320,12 +2386,32 @@ function showWinner(winner, gameState, totalTicks) {
     const overlay = document.getElementById('winner-overlay');
     overlay.style.display = 'flex';
 
-    document.getElementById('winner-name').textContent = winner === 'player1' ? 'Player 1' : 'Player 2';
-    document.getElementById('final-time').textContent = formatTime(totalTicks / 60);
+    const titleElement = document.querySelector('.winner-title');
+    
+    if (winner === 'both_lost') {
+        // Handle both cars out of fuel case
+        titleElement.textContent = '⚠️ RACE FAILED!';
+        document.getElementById('winner-name').textContent = 'Both cars ran out of fuel';
+        document.getElementById('final-time').textContent = formatTime(totalTicks / 60);
+        document.getElementById('final-fuel').textContent = '0L remaining';
+        document.getElementById('final-speed').textContent = 'Strategy needed!';
+        
+        // Change overlay styling to red theme for failure
+        overlay.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+        titleElement.style.color = '#e74c3c';
+    } else {
+        // Normal winner case - reset styling
+        titleElement.textContent = '🏆 WINNER!';
+        titleElement.style.color = '#f1c40f';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        
+        document.getElementById('winner-name').textContent = winner === 'player1' ? 'Player 1 Wins!' : 'Player 2 Wins!';
+        document.getElementById('final-time').textContent = formatTime(totalTicks / 60);
 
-    const winnerCar = gameState[winner];
-    document.getElementById('final-fuel').textContent = Math.round(100 - winnerCar.fuel) + 'L';
-    document.getElementById('final-speed').textContent = Math.round(winnerCar.speed) + ' km/h';
+        const winnerCar = gameState[winner];
+        document.getElementById('final-fuel').textContent = Math.round(winnerCar.fuel) + 'L remaining';
+        document.getElementById('final-speed').textContent = Math.round(winnerCar.speed) + ' km/h';
+    }
 }
 
 function closeWinnerOverlay() {
