@@ -187,8 +187,8 @@ class TrackGenerator {
                 grip: 0.9 + rng.next() * 0.2
             };
 
-            // Check if this should be a fuel station
-            if (fuelPositions.includes(i)) {
+            // Check if this should be a fuel station (make stations 3 segments long)
+            if (fuelPositions.some(pos => i >= pos && i < pos + 3)) {
                 segment.type = 'fuel_zone';
                 // Only place fuel in lanes 1 and 2 (middle and outer lanes) as requested
                 const lanes = [];
@@ -211,7 +211,11 @@ class TrackGenerator {
                     amount: 20 + rng.next() * 10,
                     lanes: lanes
                 });
-                track.fuelStations.push(i * 10);
+                
+                // Only add to fuelStations array once per station (at first segment)
+                if (fuelPositions.includes(i)) {
+                    track.fuelStations.push(i * 10);
+                }
             } else {
                 // Otherwise, generate other features
                 const obstacleChance = difficulty === 'none' ? 0 :
@@ -534,6 +538,15 @@ class PhysicsEngine {
         if (car.position >= track.lapDistance) {
             car.position -= track.lapDistance;
             car.lap++;
+            
+            // Clear old obstacle and boost pad tracking from previous laps to prevent memory buildup
+            // Keep only entries from the current lap (which will be empty since we just started it)
+            if (car.hitObstacles) {
+                car.hitObstacles = car.hitObstacles.filter(id => id.startsWith(`${car.lap}_`));
+            }
+            if (car.usedBoostPads) {
+                car.usedBoostPads = car.usedBoostPads.filter(id => id.startsWith(`${car.lap}_`));
+            }
         }
 
         // Update lane change
@@ -569,9 +582,9 @@ class PhysicsEngine {
             if (segment.obstacles.length > 0 && !car.isJumping) {
                 segment.obstacles.forEach((obstacle, index) => {
                     if (Math.abs(car.lane - obstacle.lane) < 0.5) {
-                        // Check if we've already hit this obstacle
+                        // Check if we've already hit this obstacle (include lap number)
                         if (!car.hitObstacles) car.hitObstacles = [];
-                        const obstacleId = `${segmentIndex}_${index}_${obstacle.lane}`; // More unique ID
+                        const obstacleId = `${car.lap}_${segmentIndex}_${index}_${obstacle.lane}`; // Include lap number
 
                         // Check collision cooldown to prevent missing consecutive obstacles
                         const canCollide = !car.lastCollisionTime ||
@@ -610,7 +623,7 @@ class PhysicsEngine {
                     if (item.type === 'fuel') {
                         // Check if car is in a lane that has fuel
                         if (item.lanes && item.lanes.includes(Math.floor(car.lane))) {
-                            const refuelRate = 0.8; // Increased rate: 48 liters/second
+                            const refuelRate = 1.2; // Increased rate: 72 liters/second (was 0.8)
                             const fuelBefore = car.fuel;
                             car.fuel = Math.min(100, car.fuel + refuelRate);
                             car.isRefueling = true; // Track refueling state
@@ -629,8 +642,8 @@ class PhysicsEngine {
             if (segment.type === 'boost_zone') {
                 segment.items.forEach((item, itemIndex) => {
                     if (item.type === 'boost_pad' && Math.abs(car.lane - item.lane) < 0.5) {
-                        // More unique ID including item index for multiple boosts
-                        const padId = `${segmentIndex}_${itemIndex}_${item.lane}`;
+                        // Include lap number in ID so boost pads work every lap
+                        const padId = `${car.lap}_${segmentIndex}_${itemIndex}_${item.lane}`;
                         if (!car.usedBoostPads) car.usedBoostPads = [];
 
                         // Add cooldown check like obstacles
@@ -1421,14 +1434,20 @@ class RaceEngine {
     }
 
     checkWinConditions() {
+        // Check if any player has completed all required laps
+        // A car wins when lap > totalLaps (meaning they've completed all required laps)
         if (this.gameState.player1.lap > this.totalLaps) {
             this.gameState.race.winner = 'player1';
             this.running = false;
             this.onRaceEnd();
-        } else if (this.gameState.player2.lap > this.totalLaps) {
+            return;
+        } 
+        
+        if (this.gameState.player2.lap > this.totalLaps) {
             this.gameState.race.winner = 'player2';
             this.running = false;
             this.onRaceEnd();
+            return;
         }
     }
 

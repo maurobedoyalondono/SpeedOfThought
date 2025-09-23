@@ -152,6 +152,11 @@ class PlayerBot {
             this.state.lastFuel = state.car.fuel;
             this.state.currentLap = state.car.lap;
             this.memory.lastLapStart = this.state.tickCount;
+            
+            // Clear boost pad memory for the new lap (keep only current lap entries)
+            this.memory.boostPads = this.memory.boostPads.filter(padId => 
+                padId.startsWith(`${state.car.lap}_`)
+            );
         }
 
         // Remember obstacles
@@ -287,8 +292,8 @@ class PlayerBot {
                 const pad = state.track.ahead[i].items[0];
                 if (!pad) continue;
 
-                // Check if already collected
-                const padId = `${Math.floor((state.car.position + i * 10) / 10)}_${pad.lane}`;
+                // Check if already collected (include lap number so it resets each lap)
+                const padId = `${state.car.lap}_${Math.floor((state.car.position + i * 10) / 10)}_${pad.lane}`;
                 if (this.memory.boostPads.includes(padId)) continue;
 
                 // Check if lane change is safe (no obstacles)
@@ -406,8 +411,8 @@ class PlayerBot {
         const fuelNeeded = avgFuelPerLap * lapsRemaining;
 
         // Constants for refueling (from game.js physics)
-        const REFUEL_RATE = 0.8; // Liters per tick
-        const REFUEL_PER_SECOND = REFUEL_RATE * 60; // 48 L/second
+        const REFUEL_RATE = 1.2; // Updated to match new rate: Liters per tick
+        const REFUEL_PER_SECOND = REFUEL_RATE * 60; // 72 L/second
 
         // Check if we're currently IN a fuel zone
         if (state.track.ahead[0] && state.track.ahead[0].type === 'fuel_zone') {
@@ -436,12 +441,12 @@ class PlayerBot {
             const fuelGainRate = fuelGained / this.state.refuelingTicks; // L/tick actual rate
 
             // We're IN a fuel zone - should we stay?
-            if (state.car.fuel < targetFuel - 10) {
+            if (state.car.fuel < targetFuel - 15) {
                 // Still need significant fuel - BRAKE hard to maximize refuel time
                 car.executeAction(CAR_ACTIONS.BRAKE);
                 this.state.lastAction = 'refueling_brake';
                 return true;
-            } else if (state.car.fuel < targetFuel - 2) {
+            } else if (state.car.fuel < targetFuel - 5) {
                 // Almost there - coast through to top off
                 car.executeAction(CAR_ACTIONS.COAST);
                 this.state.lastAction = 'refueling_coast';
@@ -468,15 +473,22 @@ class PlayerBot {
                     if (state.track.ahead[i].items) {
                         for (let item of state.track.ahead[i].items) {
                             if (item.type === 'fuel' && item.lanes) {
-                                // If fuel is in our lane, coast to save fuel getting there
+                                // If fuel is in our lane, brake early to maximize refuel time
                                 if (item.lanes.includes(state.car.lane)) {
                                     if (i === 0) {
                                         // Already in fuel zone - handled above
                                         continue;
                                     }
-                                    car.executeAction(CAR_ACTIONS.COAST);
-                                    this.state.lastAction = 'approaching_fuel';
-                                    return true;
+                                    // Start braking 2 segments before fuel zone for better positioning
+                                    if (i <= 2) {
+                                        car.executeAction(CAR_ACTIONS.BRAKE);
+                                        this.state.lastAction = 'braking_for_fuel';
+                                        return true;
+                                    } else {
+                                        car.executeAction(CAR_ACTIONS.COAST);
+                                        this.state.lastAction = 'approaching_fuel';
+                                        return true;
+                                    }
                                 }
 
                                 // Fuel is NOT in our lane - must change lanes!
