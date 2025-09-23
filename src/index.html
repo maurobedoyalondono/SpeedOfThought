@@ -439,6 +439,70 @@
             background: rgba(52, 73, 94, 0.3);
         }
 
+        /* Actions Table */
+        .actions-table {
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #34495e;
+        }
+
+        .actions-header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+
+        .actions-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #ecf0f1;
+            letter-spacing: 1px;
+        }
+
+        .actions-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            padding: 12px;
+            border-bottom: 1px solid #333;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .actions-row:last-child {
+            border-bottom: none;
+        }
+
+        .action-driver {
+            font-size: 14px;
+            font-weight: 600;
+            color: #ecf0f1;
+            letter-spacing: 0.5px;
+        }
+
+        .action-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(52, 73, 94, 0.3);
+            border-radius: 4px;
+            border-left: 3px solid #3498db;
+        }
+
+        .action-icon {
+            font-size: 16px;
+            min-width: 20px;
+        }
+
+        .action-label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
         .fuel-label {
             grid-column: 1;
             font-size: 10px;
@@ -776,6 +840,27 @@
                                 <div class="fuel-bar" id="leader-fuel-2" style="width: 100%"></div>
                             </div>
                             <span class="fuel-percent" id="leader-fuel-text-2">100%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Driver Actions Table -->
+                <div class="actions-table">
+                    <div class="actions-header">
+                        <span class="actions-title">CURRENT ACTIONS</span>
+                    </div>
+                    <div class="actions-row">
+                        <div class="action-driver">BOT-1</div>
+                        <div class="action-display" id="action-bot-1">
+                            <span class="action-icon">•</span>
+                            <span class="action-label">IDLE</span>
+                        </div>
+                    </div>
+                    <div class="actions-row">
+                        <div class="action-driver">BOT-2</div>
+                        <div class="action-display" id="action-bot-2">
+                            <span class="action-icon">•</span>
+                            <span class="action-label">IDLE</span>
                         </div>
                     </div>
                 </div>

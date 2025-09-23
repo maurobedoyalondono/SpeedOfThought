@@ -300,6 +300,9 @@ class PhysicsEngine {
 
             // Reset refueling state at start of each tick
             car.isRefueling = false;
+            
+            // Reset boost pad state at start of each tick
+            car.onBoostPad = false;
 
             // Handle lane changes
             this.handleLaneChange(car, action);
@@ -658,6 +661,7 @@ class PhysicsEngine {
                             car.speed = Math.min(300, car.speed + item.speedBonus);
                             car.usedBoostPads.push(padId);
                             car.lastBoostTime = this.tickCount;
+                            car.onBoostPad = true;  // Track that we're on a boost pad
 
                             // Clear old boost pad memory
                             if (car.usedBoostPads.length > 20) {
@@ -665,6 +669,9 @@ class PhysicsEngine {
                             }
 
                             console.log(`Car hit boost pad! Speed: ${car.speed.toFixed(0)} km/h`);
+                        } else if (car.usedBoostPads.includes(padId)) {
+                            // Still on the same boost pad but already used it
+                            car.onBoostPad = true;
                         }
                     }
                 });
@@ -1014,14 +1021,16 @@ class Renderer {
         if (car.changingLane) return 'changingLane';
         if (car.isDrafting) return 'drafting';
         if (car.isRefueling) return 'refueling';  // Use the refueling flag from physics
+        if (car.onBoostPad) return 'onBoostPad';  // Car is currently on a boost pad
         
         // Check current action for speed-based states
         switch (car.lastAction) {
-            case 'BOOST': return 'boosting';
-            case 'SPRINT': return 'sprinting';
-            case 'BRAKE': return 'braking';
-            case 'ACCELERATE': return 'accelerating';
-            case 'COAST': return 'coasting';
+            case CAR_ACTIONS.BOOST: return 'boosting';
+            case CAR_ACTIONS.SPRINT: return 'sprinting';
+            case CAR_ACTIONS.BRAKE: return 'braking';
+            case CAR_ACTIONS.ACCELERATE: return 'accelerating';
+            case CAR_ACTIONS.COAST: return 'coasting';
+            case CAR_ACTIONS.IDLE: return 'idle';
             default: return 'normal';
         }
     }
@@ -1048,6 +1057,22 @@ class Renderer {
             case 'sprinting':
                 glowColor = '#ff8800'; // Orange glow for sprint  
                 pulseIntensity = 0.6;
+                break;
+            case 'accelerating':
+                glowColor = '#00aaff'; // Blue glow for accelerating
+                pulseIntensity = 0.4;
+                break;
+            case 'coasting':
+                glowColor = '#888888'; // Gray glow for coasting
+                pulseIntensity = 0.2;
+                break;
+            case 'drafting':
+                glowColor = '#00ffff'; // Cyan glow for drafting
+                pulseIntensity = 0.5;
+                break;
+            case 'onBoostPad':
+                glowColor = '#ffdd00'; // Bright yellow glow when on boost pad
+                pulseIntensity = 0.9;
                 break;
             case 'outOfFuel':
                 bodyColor = '#666666'; // Gray when out of fuel
@@ -1182,6 +1207,49 @@ class Renderer {
                     const x = -carWidth/4 + Math.random() * carWidth/2;
                     const y = -carHeight/4 + Math.random() * carHeight/2;
                     ctx.fillRect(x, y, 3, 3);
+                }
+                break;
+                
+            case 'accelerating':
+                // Light exhaust trail
+                ctx.fillStyle = 'rgba(100, 150, 255, 0.4)';
+                ctx.fillRect(-carWidth/2 - 6, -1, 6, 2);
+                break;
+                
+            case 'coasting':
+                // Subtle efficiency indicators
+                ctx.fillStyle = 'rgba(150, 150, 150, 0.3)';
+                ctx.fillRect(-carWidth/2 - 3, 0, 3, 1);
+                break;
+                
+            case 'drafting':
+                // Wind lines showing draft effect
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 3; i++) {
+                    const offset = i * 4 - 4;
+                    ctx.beginPath();
+                    ctx.moveTo(-carWidth/2 - 15, offset);
+                    ctx.lineTo(-carWidth/2 - 5, offset);
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'idle':
+                // Minimal idle indicator
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.2)';
+                ctx.fillRect(-1, -1, 2, 2);
+                break;
+                
+            case 'onBoostPad':
+                // Bright sparkle effects when on boost pad
+                ctx.fillStyle = 'rgba(255, 221, 0, 0.8)';
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * Math.PI * 2) / 6;
+                    const distance = 15 + Math.sin(Date.now() * 0.01) * 3;
+                    const x = Math.cos(angle) * distance;
+                    const y = Math.sin(angle) * distance;
+                    ctx.fillRect(x - 1, y - 1, 2, 2);
                 }
                 break;
         }
@@ -1613,6 +1681,9 @@ class RaceEngine {
         // Calculate race positions and gaps
         this.updateF1Leaderboard();
 
+        // Update actions table
+        this.updateActionsTable();
+
         // Update debug info
         if (document.getElementById('debug-p1-speed')) {
             document.getElementById('debug-p1-speed').textContent =
@@ -1770,6 +1841,54 @@ class RaceEngine {
         
         document.getElementById('total-laps').textContent = this.totalLaps;
     }
+
+    updateActionsTable() {
+        // Update BOT-1 action
+        const bot1ActionElement = document.getElementById('action-bot-1');
+        if (bot1ActionElement) {
+            const actionInfo = this.mapCarAction(this.gameState.player1);
+            const iconSpan = bot1ActionElement.querySelector('.action-icon');
+            const labelSpan = bot1ActionElement.querySelector('.action-label');
+            
+            if (iconSpan) iconSpan.textContent = actionInfo.icon;
+            if (labelSpan) labelSpan.textContent = actionInfo.label;
+            bot1ActionElement.style.color = actionInfo.color;
+            bot1ActionElement.style.borderLeftColor = actionInfo.color;
+        }
+
+        // Update BOT-2 action
+        const bot2ActionElement = document.getElementById('action-bot-2');
+        if (bot2ActionElement) {
+            const actionInfo = this.mapCarAction(this.gameState.player2);
+            const iconSpan = bot2ActionElement.querySelector('.action-icon');
+            const labelSpan = bot2ActionElement.querySelector('.action-label');
+            
+            if (iconSpan) iconSpan.textContent = actionInfo.icon;
+            if (labelSpan) labelSpan.textContent = actionInfo.label;
+            bot2ActionElement.style.color = actionInfo.color;
+            bot2ActionElement.style.borderLeftColor = actionInfo.color;
+        }
+    }
+    
+    mapCarAction(car) {
+        if (car.fuel <= 0) return { icon: '🛑', label: 'NO FUEL', color: '#e74c3c' };
+        if (car.collisionAnimation > 0) return { icon: '💥', label: 'CRASH', color: '#ff5555' };
+        if (car.isRefueling) return { icon: '⛽', label: 'REFUEL', color: '#2ecc71' };
+        if (car.isJumping) return { icon: '🦘', label: 'JUMP', color: '#f39c12' };
+        if (car.changingLane) return { icon: '↔️', label: 'LANE', color: '#9b59b6' };
+        if (car.isDrafting) return { icon: '💨', label: 'DRAFT', color: '#1abc9c' };
+        if (car.onBoostPad) return { icon: '✨', label: 'BOOST PAD', color: '#ffdd00' };
+
+        switch (car.lastAction) {
+            case CAR_ACTIONS.BOOST: return { icon: '🚀', label: 'BOOST', color: '#f1c40f' };
+            case CAR_ACTIONS.SPRINT: return { icon: '🏎️', label: 'SPRINT', color: '#e67e22' };
+            case CAR_ACTIONS.ACCELERATE: return { icon: '➕', label: 'ACCEL', color: '#3498db' };
+            case CAR_ACTIONS.BRAKE: return { icon: '🛑', label: 'BRAKE', color: '#e74c3c' };
+            case CAR_ACTIONS.COAST: return { icon: '⚖️', label: 'COAST', color: '#bdc3c7' };
+            case CAR_ACTIONS.IDLE: return { icon: '•', label: 'IDLE', color: '#7f8c8d' };
+            default: return { icon: '?', label: 'UNK', color: '#ffffff' };
+        }
+    }
 }
 
 // ====================================
@@ -1838,6 +1957,27 @@ class UIController {
         document.getElementById('apply-config').addEventListener('click', () => {
             this.applyConfiguration();
         });
+    }
+
+    mapCarAction(car) {
+        // Determine special states first
+        if (car.fuel <= 0) return { icon: '🛑', label: 'NO FUEL', color: '#e74c3c' };
+        if (car.collisionAnimation > 0) return { icon: '💥', label: 'CRASH', color: '#ff5555' };
+        if (car.isRefueling) return { icon: '⛽', label: 'REFUEL', color: '#2ecc71' };
+        if (car.isJumping) return { icon: '🦘', label: 'JUMP', color: '#f39c12' };
+        if (car.changingLane) return { icon: '↔️', label: 'LANE', color: '#9b59b6' };
+        if (car.isDrafting) return { icon: '💨', label: 'DRAFT', color: '#1abc9c' };
+
+        // Speed-related actions
+        switch (car.lastAction) {
+            case CAR_ACTIONS.BOOST: return { icon: '🚀', label: 'BOOST', color: '#f1c40f' };
+            case CAR_ACTIONS.SPRINT: return { icon: '🏎️', label: 'SPRINT', color: '#e67e22' };
+            case CAR_ACTIONS.ACCELERATE: return { icon: '➕', label: 'ACCEL', color: '#3498db' };
+            case CAR_ACTIONS.BRAKE: return { icon: '🛑', label: 'BRAKE', color: '#e74c3c' };
+            case CAR_ACTIONS.COAST: return { icon: '⚖️', label: 'COAST', color: '#bdc3c7' };
+            case CAR_ACTIONS.IDLE: return { icon: '•', label: 'IDLE', color: '#7f8c8d' };
+            default: return { icon: '?', label: 'UNK', color: '#ffffff' };
+        }
     }
 
     setupBotLoader(playerId) {
@@ -1937,6 +2077,30 @@ class PlayerBot {
     }
 }`;
 
+        const actionShowcaseBot = `
+class PlayerBot {
+    constructor(){
+        this.tick=0;this.phase=0;this.phaseTicks=0;
+    }
+    decide(state,car){
+        this.tick++;this.phaseTicks++;
+        // Obstacle basic avoidance
+        if(state.track.ahead && state.track.ahead[0] && state.track.ahead[0].obstacles.length>0){
+            car.executeAction(CAR_ACTIONS.JUMP);
+        }
+        if(this.phaseTicks>100){ this.phase=(this.phase+1)%7; this.phaseTicks=0; }
+        switch(this.phase){
+            case 0: car.executeAction(CAR_ACTIONS.ACCELERATE); break;
+            case 1: car.executeAction(CAR_ACTIONS.SPRINT); break;
+            case 2: car.executeAction(CAR_ACTIONS.COAST); break;
+            case 3: if(state.car.speed>70) car.executeAction(CAR_ACTIONS.BRAKE); else car.executeAction(CAR_ACTIONS.COAST); break;
+            case 4: car.executeAction(CAR_ACTIONS.BOOST); break;
+            case 5: if(!state.car.isJumping) car.executeAction(CAR_ACTIONS.JUMP); car.executeAction(CAR_ACTIONS.ACCELERATE); break;
+            case 6: if(!state.car.changingLane && Math.random()<0.2){ if(state.car.lane===0) car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT); else if(state.car.lane===2) car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT); else (Math.random()<0.5?car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT):car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT)); } car.executeAction(CAR_ACTIONS.ACCELERATE); break;
+        }
+    }
+}`;
+
         const racingBot = `
 class PlayerBot {
     decide(state, car) {
@@ -1984,12 +2148,13 @@ class PlayerBot {
     }
 }`;
 
-        this.bot1Code = simpleBot;
+    // Use showcase bot for player1 so action icons are demonstrated
+    this.bot1Code = actionShowcaseBot;
         this.bot2Code = racingBot;
 
         // Update UI
         document.getElementById('player1-loader').classList.add('loaded');
-        document.getElementById('player1-loader').querySelector('.bot-file').textContent = 'SimpleBot.js';
+    document.getElementById('player1-loader').querySelector('.bot-file').textContent = 'ActionShowcaseBot.js';
 
         document.getElementById('player2-loader').classList.add('loaded');
         document.getElementById('player2-loader').querySelector('.bot-file').textContent = 'RacingBot.js';
