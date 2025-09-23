@@ -399,6 +399,181 @@
             margin-top: 30px;
         }
 
+        /* F1 Style Leaderboard */
+        .f1-leaderboard {
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+        }
+
+        .leaderboard-header {
+            background: #e74c3c;
+            display: grid;
+            grid-template-columns: 40px 1fr 60px 80px;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .leaderboard-row {
+            display: grid;
+            grid-template-columns: 40px 1fr 60px 80px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #333;
+            transition: background 0.2s ease;
+            align-items: center;
+        }
+
+        .fuel-row {
+            display: grid;
+            grid-template-columns: 40px 1fr 60px 80px;
+            gap: 10px;
+            padding: 5px 12px 10px 12px;
+            border-bottom: 2px solid #2c3e50;
+            align-items: center;
+            background: rgba(52, 73, 94, 0.3);
+        }
+
+        .fuel-label {
+            grid-column: 1;
+            font-size: 10px;
+            color: #95a5a6;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .leaderboard-row:last-child {
+            border-bottom: none;
+        }
+
+        .leaderboard-row:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .pos-col {
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .leader-pos {
+            background: #27ae60;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            margin: 0 auto;
+        }
+
+        .driver-col {
+            padding-left: 8px;
+        }
+
+        .driver-name {
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+
+        .driver-info {
+            display: flex;
+            gap: 8px;
+            font-size: 10px;
+        }
+
+        .lap-info {
+            color: #3498db;
+            font-weight: 500;
+        }
+
+        .fuel-info {
+            color: #f39c12;
+            font-weight: 500;
+        }
+
+        .fuel-display {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            grid-column: 2 / 5;
+        }
+
+        .fuel-bar-container {
+            width: 120px;
+            height: 10px;
+            background: #2c3e50;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid #34495e;
+        }
+
+        .fuel-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #e74c3c 0%, #f39c12 50%, #27ae60 100%);
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .fuel-percent {
+            font-size: 12px;
+            color: #f39c12;
+            font-weight: 600;
+            min-width: 35px;
+        }
+
+        .speed-col {
+            font-weight: 700;
+            color: #2ecc71;
+            text-align: right;
+            font-size: 13px;
+        }
+
+        .gap-col {
+            font-weight: 600;
+            text-align: right;
+            font-size: 12px;
+            color: #e67e22;
+        }
+
+        /* Race Info Section */
+        .race-info {
+            background: #2c3e50;
+            border-radius: 6px;
+            padding: 15px;
+            border: 1px solid #34495e;
+        }
+
+        .race-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .race-info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-label {
+            color: #bdc3c7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            color: #ecf0f1;
+            font-weight: 700;
+        }
+
         .race-stat {
             text-align: center;
         }
@@ -551,36 +726,74 @@
             </div>
 
             <div class="panel-content" id="stats-panel">
-                <h3>Player 1 🏎️</h3>
-                <div class="stat-group">
-                    <div class="stat-label">Speed</div>
-                    <div class="stat-value"><span id="p1-speed">0</span><span class="stat-unit">km/h</span></div>
-                </div>
-                <div class="stat-group">
-                    <div class="stat-label">Fuel</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill fuel" id="p1-fuel" style="width: 100%"></div>
+                <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 16px;">� RACE LEADERBOARD</h3>
+                
+                <!-- F1 Style Leaderboard -->
+                <div class="f1-leaderboard">
+                    <div class="leaderboard-header">
+                        <div class="pos-col">POS</div>
+                        <div class="driver-col">DRIVER</div>
+                        <div class="speed-col">SPEED</div>
+                        <div class="gap-col">GAP</div>
+                    </div>
+                    
+                    <div class="leaderboard-row" id="leader-row-1">
+                        <div class="pos-col leader-pos" id="leader-pos-1">1</div>
+                        <div class="driver-col">
+                            <div class="driver-name" id="leader-driver-1">BOT-1</div>
+                            <div class="driver-info">
+                                <span class="lap-info" id="leader-lap-1">Lap 1/5</span>
+                            </div>
+                        </div>
+                        <div class="speed-col" id="leader-speed-1">0</div>
+                        <div class="gap-col" id="leader-gap-1">-</div>
+                    </div>
+                    <div class="fuel-row">
+                        <div class="fuel-label">FUEL:</div>
+                        <div class="fuel-display">
+                            <div class="fuel-bar-container">
+                                <div class="fuel-bar" id="leader-fuel-1" style="width: 100%"></div>
+                            </div>
+                            <span class="fuel-percent" id="leader-fuel-text-1">100%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="leaderboard-row" id="leader-row-2">
+                        <div class="pos-col leader-pos" id="leader-pos-2">2</div>
+                        <div class="driver-col">
+                            <div class="driver-name" id="leader-driver-2">BOT-2</div>
+                            <div class="driver-info">
+                                <span class="lap-info" id="leader-lap-2">Lap 1/5</span>
+                            </div>
+                        </div>
+                        <div class="speed-col" id="leader-speed-2">0</div>
+                        <div class="gap-col" id="leader-gap-2">+0.000</div>
+                    </div>
+                    <div class="fuel-row">
+                        <div class="fuel-label">FUEL:</div>
+                        <div class="fuel-display">
+                            <div class="fuel-bar-container">
+                                <div class="fuel-bar" id="leader-fuel-2" style="width: 100%"></div>
+                            </div>
+                            <span class="fuel-percent" id="leader-fuel-text-2">100%</span>
+                        </div>
                     </div>
                 </div>
-                <div class="stat-group">
-                    <div class="stat-label">Position</div>
-                    <div class="stat-value" id="p1-position">1st</div>
-                </div>
-
-                <h3 style="margin-top: 30px;">Player 2 🏎️</h3>
-                <div class="stat-group">
-                    <div class="stat-label">Speed</div>
-                    <div class="stat-value"><span id="p2-speed">0</span><span class="stat-unit">km/h</span></div>
-                </div>
-                <div class="stat-group">
-                    <div class="stat-label">Fuel</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill fuel" id="p2-fuel" style="width: 100%"></div>
+                
+                <!-- Race Info -->
+                <div class="race-info">
+                    <div class="race-info-item">
+                        <span class="info-label">Race Time:</span>
+                        <span class="info-value" id="race-time">0:00</span>
                     </div>
-                </div>
-                <div class="stat-group">
-                    <div class="stat-label">Position</div>
-                    <div class="stat-value" id="p2-position">2nd</div>
+                    <div class="race-info-item">
+                        <span class="info-label">Current Lap:</span>
+                        <span class="info-value" id="current-lap-display">1</span>
+                    </div>
+                    <div class="race-info-item">
+                        <span class="info-label">Total Laps:</span>
+                        <span class="info-value" id="total-laps">5</span>
+                    </div>
                 </div>
             </div>
 

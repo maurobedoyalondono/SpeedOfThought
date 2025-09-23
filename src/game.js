@@ -144,7 +144,7 @@ class TrackGenerator {
     constructor() {
         this.trackLength = 2000; // meters
         this.lanes = 3;
-        this.fuelStationCount = 2; // MAX 2 fuel stations as requested
+        this.fuelStationCount = 1; // Default number of fuel stations (configurable via UI)
     }
 
     generate(seed = Math.random(), difficulty = 'medium') {
@@ -163,8 +163,8 @@ class TrackGenerator {
             pitLaneExit: 1950
         };
 
-        // Limit fuel stations to maximum 2
-        const actualFuelCount = Math.min(this.fuelStationCount, 2);
+        // Use the configured number of fuel stations
+        const actualFuelCount = this.fuelStationCount;
 
         // Place fuel stations evenly across the track
         const fuelInterval = Math.floor(segments / (actualFuelCount + 1));
@@ -297,6 +297,9 @@ class PhysicsEngine {
 
             // Calculate if we're drafting BEFORE applying actions
             car.isDrafting = this.calculateDrafting(car, opponent);
+
+            // Reset refueling state at start of each tick
+            car.isRefueling = false;
 
             // Handle lane changes
             this.handleLaneChange(car, action);
@@ -971,18 +974,18 @@ class Renderer {
         } else {
             ctx.fillStyle = color;
         }
-        ctx.fillRect(-15, -20, 30, 40);
 
-        // Windows
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(-10, -15, 20, 15);
-        ctx.fillRect(-10, 5, 20, 10);
+        // Determine car state for enhanced visuals
+        const carState = this.getCarState(car);
+        
+        // Draw enhanced car based on state
+        this.drawEnhancedCar(ctx, car, color, carState);
 
         // Label
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(label, 0, 3);
+        ctx.fillText(label, 0, 2);
 
         ctx.restore();
 
@@ -1042,6 +1045,187 @@ class Renderer {
         ctx.restore();
     }
 
+    getCarState(car) {
+        // Determine the current state of the car for visual effects
+        if (car.fuel <= 0) return 'outOfFuel';
+        if (car.collisionAnimation > 0) return 'collision';
+        if (car.isJumping) return 'jumping';
+        if (car.changingLane) return 'changingLane';
+        if (car.isDrafting) return 'drafting';
+        if (car.isRefueling) return 'refueling';  // Use the refueling flag from physics
+        
+        // Check current action for speed-based states
+        switch (car.lastAction) {
+            case 'BOOST': return 'boosting';
+            case 'SPRINT': return 'sprinting';
+            case 'BRAKE': return 'braking';
+            case 'ACCELERATE': return 'accelerating';
+            case 'COAST': return 'coasting';
+            default: return 'normal';
+        }
+    }
+
+    drawEnhancedCar(ctx, car, color, state) {
+        // Car dimensions - now horizontal (facing right)
+        const carWidth = 40;  // Car length (was height)
+        const carHeight = 24; // Car width (was width)
+        
+        // Determine car color based on state
+        let bodyColor = color;
+        let glowColor = null;
+        let pulseIntensity = 0;
+        
+        switch (state) {
+            case 'collision':
+                const flashIntensity = car.collisionAnimation / 20;
+                bodyColor = `rgba(255, ${Math.floor(68 * (1-flashIntensity))}, ${Math.floor(68 * (1-flashIntensity))}, 1)`;
+                break;
+            case 'boosting':
+                glowColor = '#ffff00'; // Yellow glow for boost
+                pulseIntensity = 0.8;
+                break;
+            case 'sprinting':
+                glowColor = '#ff8800'; // Orange glow for sprint  
+                pulseIntensity = 0.6;
+                break;
+            case 'outOfFuel':
+                bodyColor = '#666666'; // Gray when out of fuel
+                break;
+            case 'refueling':
+                glowColor = '#00ff00'; // Green glow when refueling
+                pulseIntensity = 0.8;
+                break;
+            case 'braking':
+                glowColor = '#ff0000'; // Red glow when braking
+                pulseIntensity = 0.5;
+                break;
+        }
+        
+        // Draw glow effect
+        if (glowColor && pulseIntensity > 0) {
+            const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7; // Pulsing effect
+            ctx.save();
+            ctx.shadowColor = glowColor;
+            ctx.shadowBlur = 15 * pulseIntensity * pulse;
+            ctx.fillStyle = bodyColor;
+            ctx.fillRect(-carWidth/2, -carHeight/2, carWidth, carHeight);
+            ctx.restore();
+        }
+        
+        // Main car body (horizontal rectangle)
+        ctx.fillStyle = bodyColor;
+        ctx.fillRect(-carWidth/2, -carHeight/2, carWidth, carHeight);
+        
+        // Car details
+        this.drawCarDetails(ctx, carWidth, carHeight, state);
+        
+        // Additional state-specific effects
+        this.drawStateEffects(ctx, car, state, carWidth, carHeight);
+    }
+
+    drawCarDetails(ctx, carWidth, carHeight, state) {
+        // Front bumper
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(carWidth/2 - 3, -carHeight/2, 3, carHeight);
+        
+        // Rear bumper  
+        ctx.fillRect(-carWidth/2, -carHeight/2, 3, carHeight);
+        
+        // Windows (front and rear)
+        ctx.fillStyle = 'rgba(100, 150, 255, 0.4)';
+        // Front windshield
+        ctx.fillRect(carWidth/2 - 12, -carHeight/2 + 3, 8, carHeight - 6);
+        // Rear windshield
+        ctx.fillRect(-carWidth/2 + 4, -carHeight/2 + 3, 8, carHeight - 6);
+        
+        // Side windows
+        ctx.fillStyle = 'rgba(100, 150, 255, 0.3)';
+        ctx.fillRect(-6, -carHeight/2 + 2, 12, 4);  // Top side windows
+        ctx.fillRect(-6, carHeight/2 - 6, 12, 4);   // Bottom side windows
+        
+        // Wheels
+        ctx.fillStyle = '#222222';
+        const wheelSize = 6;
+        // Front wheels
+        ctx.fillRect(carWidth/2 - 8, -carHeight/2 - 2, wheelSize, 4);
+        ctx.fillRect(carWidth/2 - 8, carHeight/2 - 2, wheelSize, 4);
+        // Rear wheels  
+        ctx.fillRect(-carWidth/2 + 2, -carHeight/2 - 2, wheelSize, 4);
+        ctx.fillRect(-carWidth/2 + 2, carHeight/2 - 2, wheelSize, 4);
+        
+        // Headlights (when not out of fuel)
+        if (state !== 'outOfFuel') {
+            ctx.fillStyle = '#ffffcc';
+            ctx.fillRect(carWidth/2 - 1, -carHeight/2 + 4, 2, 3);
+            ctx.fillRect(carWidth/2 - 1, carHeight/2 - 7, 2, 3);
+        }
+        
+        // Taillights
+        ctx.fillStyle = state === 'braking' ? '#ff4444' : '#ff8888';
+        ctx.fillRect(-carWidth/2, -carHeight/2 + 4, 2, 3);
+        ctx.fillRect(-carWidth/2, carHeight/2 - 7, 2, 3);
+    }
+
+    drawStateEffects(ctx, car, state, carWidth, carHeight) {
+        switch (state) {
+            case 'boosting':
+                // Exhaust flames
+                ctx.fillStyle = '#ffaa00';
+                for (let i = 0; i < 3; i++) {
+                    const flameLength = 8 + Math.random() * 6;
+                    const y = -carHeight/2 + 6 + i * 4;
+                    ctx.fillRect(-carWidth/2 - flameLength, y, flameLength, 2);
+                }
+                break;
+                
+            case 'sprinting':
+                // Heat exhaust
+                ctx.fillStyle = 'rgba(255, 100, 0, 0.6)';
+                ctx.fillRect(-carWidth/2 - 4, -2, 4, 4);
+                break;
+                
+            case 'braking':
+                // Brake light effect is already handled in drawCarDetails
+                // Add smoke from tires
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.4)';
+                ctx.fillRect(-8, -carHeight/2 - 3, 16, 2);
+                ctx.fillRect(-8, carHeight/2 + 1, 16, 2);
+                break;
+                
+            case 'changingLane':
+                // Tire marks during lane change
+                ctx.strokeStyle = 'rgba(50, 50, 50, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(-carWidth/2, -carHeight/2 - 4);
+                ctx.lineTo(-carWidth/2 - 10, -carHeight/2 - 8);
+                ctx.moveTo(-carWidth/2, carHeight/2 + 4);
+                ctx.lineTo(-carWidth/2 - 10, carHeight/2 + 8);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                break;
+                
+            case 'outOfFuel':
+                // Smoke from engine
+                ctx.fillStyle = 'rgba(80, 80, 80, 0.5)';
+                for (let i = 0; i < 2; i++) {
+                    ctx.fillRect(carWidth/2 - 5, -3 + i * 6, 8, 2);
+                }
+                break;
+                
+            case 'refueling':
+                // Green fuel particles
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
+                for (let i = 0; i < 4; i++) {
+                    const x = -carWidth/4 + Math.random() * carWidth/2;
+                    const y = -carHeight/4 + Math.random() * carHeight/2;
+                    ctx.fillRect(x, y, 3, 3);
+                }
+                break;
+        }
+    }
+
     drawEffects(gameState) {
         // Draw any special effects here
     }
@@ -1065,6 +1249,8 @@ class Renderer {
 
     getCarRotation(position, lapDistance) {
         const progress = position / lapDistance;
+        // Cars face forward in their direction of travel around the oval
+        // At position 0 (top of track), car faces right (0 radians)
         const angle = progress * Math.PI * 2;
         return angle;
     }
@@ -1463,20 +1649,8 @@ class RaceEngine {
         document.getElementById('current-lap').textContent =
             Math.max(this.gameState.player1.lap, this.gameState.player2.lap);
 
-        // Update player stats
-        document.getElementById('p1-speed').textContent =
-            Math.round(this.gameState.player1.speed);
-        document.getElementById('p1-fuel').style.width =
-            this.gameState.player1.fuel + '%';
-        document.getElementById('p1-position').textContent =
-            this.gameState.player1.racePosition === 1 ? '1st' : '2nd';
-
-        document.getElementById('p2-speed').textContent =
-            Math.round(this.gameState.player2.speed);
-        document.getElementById('p2-fuel').style.width =
-            this.gameState.player2.fuel + '%';
-        document.getElementById('p2-position').textContent =
-            this.gameState.player2.racePosition === 1 ? '1st' : '2nd';
+        // Calculate race positions and gaps
+        this.updateF1Leaderboard();
 
         // Update debug info
         if (document.getElementById('debug-p1-speed')) {
@@ -1518,21 +1692,122 @@ class RaceEngine {
             entry.className = 'log-entry';
             entry.innerHTML = `
                 <span class="log-tick">${logEntry.tick}</span>
-                <span class="log-player1">P1: ${logEntry.player1 || 'IDLE'}</span> |
-                <span class="log-player2">P2: ${logEntry.player2 || 'IDLE'}</span>
+                <span class="log-player1">${logEntry.player1}</span>
+                <span class="log-player2">${logEntry.player2}</span>
             `;
             logDiv.appendChild(entry);
         }
 
-        // Auto-scroll to bottom if there are new entries
-        if (currentLogCount < this.actionLog.length) {
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-
-        // Limit to last 10 entries per car (20 total) to prevent memory issues and clutter
+        // Keep log size manageable
         while (logDiv.children.length > 20) {
             logDiv.removeChild(logDiv.firstChild);
         }
+    }
+
+    updateF1Leaderboard() {
+        // Calculate total progress for each player (laps + position)
+        const p1Progress = (this.gameState.player1.lap - 1) * this.gameState.track.lapDistance + this.gameState.player1.position;
+        const p2Progress = (this.gameState.player2.lap - 1) * this.gameState.track.lapDistance + this.gameState.player2.position;
+
+        // Determine positions and sort by progress
+        const drivers = [
+            {
+                id: 'player1',
+                name: 'BOT-1',
+                color: '#e74c3c',
+                progress: p1Progress,
+                car: this.gameState.player1
+            },
+            {
+                id: 'player2', 
+                name: 'BOT-2',
+                color: '#3498db',
+                progress: p2Progress,
+                car: this.gameState.player2
+            }
+        ].sort((a, b) => b.progress - a.progress); // Sort by progress descending
+
+        // Update leaderboard positions
+        drivers.forEach((driver, index) => {
+            const position = index + 1;
+            const rowIndex = index + 1;
+            
+            // Update position
+            document.getElementById(`leader-pos-${rowIndex}`).textContent = position;
+            
+            // Update position color (1st = gold, 2nd = silver)
+            const posElement = document.getElementById(`leader-pos-${rowIndex}`);
+            if (position === 1) {
+                posElement.style.background = '#f1c40f'; // Gold
+            } else {
+                posElement.style.background = '#95a5a6'; // Silver
+            }
+            
+            // Update driver name
+            document.getElementById(`leader-driver-${rowIndex}`).textContent = driver.name;
+            
+            // Update lap info
+            document.getElementById(`leader-lap-${rowIndex}`).textContent = 
+                `Lap ${driver.car.lap}/${this.totalLaps}`;
+            
+            // Update fuel bar and percentage
+            const fuelPercent = Math.max(0, (driver.car.fuel / driver.car.maxFuel) * 100);
+            const fuelBar = document.getElementById(`leader-fuel-${rowIndex}`);
+            const fuelText = document.getElementById(`leader-fuel-text-${rowIndex}`);
+            
+            if (fuelBar) {
+                fuelBar.style.width = `${fuelPercent}%`;
+            }
+            if (fuelText) {
+                fuelText.textContent = `${Math.round(fuelPercent)}%`;
+            }
+            
+            // Update speed
+            document.getElementById(`leader-speed-${rowIndex}`).textContent = 
+                `${Math.round(driver.car.speed)} km/h`;
+            
+            // Update gap
+            if (position === 1) {
+                document.getElementById(`leader-gap-${rowIndex}`).textContent = '-';
+                document.getElementById(`leader-gap-${rowIndex}`).style.color = '#27ae60';
+            } else {
+                const gap = drivers[0].progress - driver.progress;
+                
+                // Calculate gap based on distance and average speed
+                let gapDisplay;
+                if (gap < 10) {
+                    // Very close - show in meters
+                    gapDisplay = `+${gap.toFixed(1)}m`;
+                } else {
+                    // Calculate time gap based on leader's speed
+                    const leaderSpeed = drivers[0].car.speed / 3.6; // Convert to m/s
+                    const timeGap = leaderSpeed > 0 ? gap / leaderSpeed : 0;
+                    
+                    if (timeGap < 60) {
+                        gapDisplay = `+${timeGap.toFixed(3)}s`;
+                    } else {
+                        const minutes = Math.floor(timeGap / 60);
+                        const seconds = timeGap % 60;
+                        gapDisplay = `+${minutes}:${seconds.toFixed(1)}`;
+                    }
+                }
+                
+                document.getElementById(`leader-gap-${rowIndex}`).textContent = gapDisplay;
+                document.getElementById(`leader-gap-${rowIndex}`).style.color = '#e67e22';
+            }
+        });
+
+        // Update race info
+        const raceTimeSeconds = this.tick / 60;
+        const minutes = Math.floor(raceTimeSeconds / 60);
+        const seconds = Math.floor(raceTimeSeconds % 60);
+        document.getElementById('race-time').textContent = 
+            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        document.getElementById('current-lap-display').textContent = 
+            Math.max(this.gameState.player1.lap, this.gameState.player2.lap);
+        
+        document.getElementById('total-laps').textContent = this.totalLaps;
     }
 }
 
