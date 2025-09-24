@@ -61,9 +61,11 @@ Each segment in `state.track.ahead[]` contains:
 ## Game Physics
 
 ### Lanes
-- All lanes are equal distance (no lane advantage removed from current version)
-- Lane 0 (left), Lane 1 (middle), Lane 2 (right)
-- Fuel zones only exist in lanes 1 and 2 (middle and right)
+- **Realistic lane distances**: Inner lane is shorter than outer lane (simulates real racing physics)
+  - Lane 0 (inner/left): 95% distance - **Strategic advantage for shorter laps**
+  - Lane 1 (middle): 100% distance - Baseline
+  - Lane 2 (outer/right): 105% distance - Longer distance but potentially less traffic
+- Fuel zones are randomly assigned to any single lane (0, 1, or 2) per fuel station
 
 ### Fuel
 - Consumption varies by action and current speed

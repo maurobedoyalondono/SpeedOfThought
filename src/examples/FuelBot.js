@@ -5,7 +5,7 @@
 // - Orange cones = OBSTACLES (crash = 70% speed loss + 5L fuel damage!)
 // - Yellow zones = BOOST PADS (drive over for +20 km/h speed)
 // - Green zones = FUEL ZONES (refuel at 72L/sec, lanes 1-2 only)
-// - All lanes are equal distance (no lane advantage)
+// - Lane 0 (inner) = 95% distance, Lane 1 (middle) = 100%, Lane 2 (outer) = 105%
 
 class PlayerBot {
     constructor() {

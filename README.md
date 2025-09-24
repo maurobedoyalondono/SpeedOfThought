@@ -121,7 +121,7 @@ Edit track parameters in `index.html`:
 - **Fuel Zones**: Green areas for continuous refueling (72L/second)
 - **Boost Pads**: Yellow zones that add +20 km/h speed bonus
 - **Pit Lane**: Full refuel option but costs significant time
-- **3 Lanes**: All lanes are equal distance (no lane advantage)
+- **3 Lanes**: **Realistic lane distances** - Lane 0 (inner) is 5% shorter, Lane 2 (outer) is 5% longer
 
 ## 🔧 Technical Details
 
