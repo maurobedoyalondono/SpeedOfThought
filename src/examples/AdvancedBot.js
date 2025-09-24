@@ -2,10 +2,10 @@
 // This bot uses advanced prediction, memory, and optimization
 //
 // TRACK ELEMENTS:
-// - Orange cones = OBSTACLES (crash = -70% speed + stun!)
+// - Orange cones = OBSTACLES (crash = 70% speed reduction + stun!)
 // - Yellow zones = BOOST PADS (+20 km/h free speed!)
-// - Green zones = FUEL ZONES (continuous refuel)
-// - Inner lane (0) is 5% shorter = FASTER LAP TIMES
+// - Green zones = FUEL ZONES (continuous refuel at 72L/sec)
+// - Fuel zones only exist in lanes 1-2 (middle and right)
 // - Drafting saves 0-30% fuel based on distance (5-25m)
 // - Pit stops = full fuel but ~5 second penalty
 

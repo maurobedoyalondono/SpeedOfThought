@@ -15,25 +15,30 @@ class PlayerBot {
 ## Available Actions
 
 ### CAR_ACTIONS
-- `ACCELERATE` - Speed up (normal fuel consumption)
-- `SPRINT` - Maximum speed (high fuel consumption)
-- `COAST` - Maintain speed (no fuel consumption)
-- `BRAKE` - Slow down
-- `BOOST` - Use boost item (+20 km/h)
-- `CHANGE_LANE_LEFT` - Move to inner lane
-- `CHANGE_LANE_RIGHT` - Move to outer lane
+- `ACCELERATE` - Speed up by 5 km/h per tick (moderate fuel: ~1.5L/sec)
+- `SPRINT` - Speed up by 10 km/h per tick (high fuel: ~2.7L/sec)
+- `COAST` - Maintain current speed (low fuel: ~0.48L/sec)
+- `BRAKE` - Slow down by 15 km/h per tick (minimal fuel: ~0.18L/sec)
+- `BOOST` - Speed up by 20 km/h per tick (uses 1 boost charge + high fuel)
+- `IDLE` - Natural deceleration by 2 km/h per tick (very low fuel)
+- `CHANGE_LANE_LEFT` - Move one lane left (takes 5 ticks to complete)
+- `CHANGE_LANE_RIGHT` - Move one lane right (takes 5 ticks to complete)
+- `JUMP` - Jump over obstacles for 10 ticks (5L fuel cost)
+- `ENTER_PIT` - Enter pit lane for full refuel (time penalty)
 
 ## Game State Object
 
 ### state.car
 Your car's current status:
-- `speed` - Current speed (km/h)
+
+- `speed` - Current speed (km/h, max 300)
 - `fuel` - Fuel remaining (0-100L)
-- `lane` - Current lane (0=inner, 1=middle, 2=outer)
-- `position` - Distance traveled (meters)
+- `lane` - Current lane (0=left, 1=middle, 2=right)
+- `position` - Distance traveled in current lap (meters)
 - `lap` - Current lap number
-- `boosts` - Number of boosts available
-- `isDrafting` - True if drafting behind opponent
+- `boosts` - Number of boost charges available
+- `isDrafting` - True if drafting behind opponent (5-25m range)
+- `draftEffectiveness` - Drafting efficiency (0.0-1.0)
 
 ### state.opponent
 Opponent car information:
@@ -56,30 +61,35 @@ Each segment in `state.track.ahead[]` contains:
 ## Game Physics
 
 ### Lanes
-- Lane 0 (inner): 5% shorter distance
-- Lane 1 (middle): Normal distance
-- Lane 2 (outer): 5% longer distance
+- All lanes are equal distance (no lane advantage removed from current version)
+- Lane 0 (left), Lane 1 (middle), Lane 2 (right)
+- Fuel zones only exist in lanes 1 and 2 (middle and right)
 
 ### Fuel
-- Consumed based on action (Sprint > Accelerate > Coast)
-- Refuel by driving through fuel zones (lanes 1-2 only)
-- Refuel rate: 48L/second while in zone
+- Consumption varies by action and current speed
+- Higher speeds increase fuel consumption by up to 30%
+- Refuel in green fuel zones at 72L/second (1.2L per tick)
+- Maximum fuel capacity: 100L
 
 ### Collisions
-- Obstacles: -30 km/h speed penalty
-- Boost pads: +20 km/h speed bonus
-- 5-tick cooldown between collisions
+- Obstacles: Reduce speed by 70% (multiply by 0.3) + 5L fuel damage
+- Collision stun: 30 ticks (0.5 seconds) where car can't respond
+- Boost pads: Add +20 km/h speed bonus (up to 300 km/h max)
+- 5-tick cooldown between consecutive collisions
 
 ### Drafting
-- Following opponent closely saves 30% fuel
-- Effective range: 5-25 meters behind
+- Following opponent closely (5-25m behind) saves up to 30% fuel
+- Effectiveness scales with distance: closer = more fuel savings
+- Must be in same lane or very close to get drafting effect
 
 ## Strategy Tips
-- Inner lane is faster but has no fuel
-- Plan pit stops - fuel zones are limited
-- Use boosts strategically
-- Draft to save fuel
-- Avoid obstacles!
+
+- Fuel zones are only in lanes 1-2, so plan refueling stops
+- Draft behind opponents when possible to save fuel
+- Use COAST or BRAKE to slow down in fuel zones for more refuel time
+- Jump over obstacles if you have fuel, or change lanes to avoid them
+- Boost gives maximum acceleration but uses charges and extra fuel
+- Monitor fuel consumption - faster actions use exponentially more fuel
 
 ## Example: Basic Racer
 ```javascript

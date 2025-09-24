@@ -12,10 +12,12 @@ class PlayerBot {
         this.totalTicks++;
 
         // CONCEPT: Different actions use different amounts of fuel
-        // - SPRINT: Fast but uses lots of fuel (2.5 per tick)
-        // - ACCELERATE: Normal speed, normal fuel (1.0 per tick)
-        // - COAST: Maintain speed, save fuel (0.3 per tick)
-        // - IDLE: Slow down naturally (0.5 per tick)
+        // Real consumption varies with speed but base rates are:
+        // - SPRINT: Fast but uses lots of fuel (~2.7L/sec at speed)
+        // - ACCELERATE: Normal speed, moderate fuel (~1.5L/sec)
+        // - COAST: Maintain speed, save fuel (~0.48L/sec)
+        // - BRAKE: Slow down efficiently (~0.18L/sec)
+        // - IDLE: Slow down naturally (~0.3L/sec)
 
         // BASIC STRATEGY: Adjust speed based on fuel level
         if (state.car.fuel > 70) {
@@ -67,16 +69,16 @@ class PlayerBot {
 LESSON 2 CONCEPTS:
 
 FUEL CONSUMPTION RATES:
-- SPRINT: 2.5 fuel/tick (very fast, very expensive)
-- ACCELERATE: 1.0 fuel/tick (balanced)
-- COAST: 0.3 fuel/tick (maintain speed efficiently)
-- BRAKE: 0.1 fuel/tick (slowing down)
-- IDLE: 0.5 fuel/tick (gradual slowdown)
+- SPRINT: ~2.7L/sec (very fast, very expensive, varies with speed)
+- ACCELERATE: ~1.5L/sec (balanced, moderate fuel use)
+- COAST: ~0.48L/sec (maintain speed efficiently)
+- BRAKE: ~0.18L/sec (slowing down, minimal fuel)
+- IDLE: ~0.3L/sec (gradual slowdown, low fuel)
 
 FUEL ZONES:
-- Green zones on the track restore fuel
-- Drive through them to refuel
-- Plan your route to hit fuel zones when needed
+- Green zones on the track restore fuel at 72L/second
+- Only available in lanes 1 and 2 (middle and right)
+- Drive slowly through them to maximize refuel time
 
 STRATEGY TIPS:
 1. You don't always need maximum speed
@@ -92,7 +94,6 @@ MATH HELP:
 - Track is 2000 meters per lap
 - At 180 km/h, you travel 50 meters per second
 - That's 40 seconds per lap at constant speed
-- 40 seconds = 2400 ticks
-- At ACCELERATE (1.0 fuel/tick) that's 2400 fuel per lap!
-- You need to be more efficient!
+- At moderate ACCELERATE fuel consumption (~1.5L/sec) that's 60L per lap!
+- You need to be more efficient with coasting and fuel zones!
 */

@@ -2,10 +2,10 @@
 // Shows how to find fuel zones and boost pads
 //
 // TRACK ELEMENTS:
-// - Orange cones = OBSTACLES (avoid these or crash!)
+// - Orange cones = OBSTACLES (crash = 70% speed loss + 5L fuel damage!)
 // - Yellow zones = BOOST PADS (drive over for +20 km/h speed)
-// - Green zones = FUEL ZONES (drive through to refuel)
-// - Inner lane (0) is shorter, outer lane (2) is longer!
+// - Green zones = FUEL ZONES (refuel at 72L/sec, lanes 1-2 only)
+// - All lanes are equal distance (no lane advantage)
 
 class PlayerBot {
     constructor() {

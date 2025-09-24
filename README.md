@@ -37,19 +37,20 @@ Your bot's `decide()` function runs 60 times per second. Each time, you can:
 
 ```javascript
 // Speed Control
-car.executeAction(CAR_ACTIONS.ACCELERATE);  // Go faster
-car.executeAction(CAR_ACTIONS.SPRINT);      // Maximum speed!
-car.executeAction(CAR_ACTIONS.COAST);       // Save fuel
-car.executeAction(CAR_ACTIONS.BRAKE);       // Slow down
-car.executeAction(CAR_ACTIONS.BOOST);       // Super speed burst!
+car.executeAction(CAR_ACTIONS.ACCELERATE);  // +5 km/h per tick, moderate fuel
+car.executeAction(CAR_ACTIONS.SPRINT);      // +10 km/h per tick, high fuel
+car.executeAction(CAR_ACTIONS.COAST);       // Maintain speed, low fuel use
+car.executeAction(CAR_ACTIONS.BRAKE);       // -15 km/h per tick, minimal fuel
+car.executeAction(CAR_ACTIONS.BOOST);       // +20 km/h per tick, uses boost charge
+car.executeAction(CAR_ACTIONS.IDLE);        // -2 km/h per tick, low fuel use
 
 // Lane Changes
 car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
 car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
 
-// Special
-car.executeAction(CAR_ACTIONS.JUMP);        // Jump over obstacles
-car.executeAction(CAR_ACTIONS.ENTER_PIT);   // Pit stop for fuel
+// Special Actions
+car.executeAction(CAR_ACTIONS.JUMP);        // Jump over obstacles (10 ticks)
+car.executeAction(CAR_ACTIONS.ENTER_PIT);   // Enter pit lane for full refuel
 ```
 
 ### Learning Path
@@ -108,16 +109,19 @@ Edit track parameters in `index.html`:
 - **Colorful UI** designed to engage teenagers
 
 ### Physics Simulation
-- Realistic acceleration and braking
-- Fuel consumption based on speed
-- Drafting (slipstream) behind opponents
-- Lane changes and collisions
+
+- Realistic acceleration and braking with speed limits
+- Dynamic fuel consumption based on action and speed
+- Drafting (slipstream) saves up to 30% fuel when close behind opponent
+- Lane changes take 5 ticks to complete
 
 ### Track Features
-- **Obstacles**: Cones to avoid or jump over
-- **Fuel Zones**: Green areas to refuel
-- **Boost Pads**: Yellow zones for speed boosts
-- **Pit Lane**: Full refuel but costs time
+
+- **Obstacles**: Orange cones that reduce speed by 70% and cause 5L fuel damage
+- **Fuel Zones**: Green areas for continuous refueling (72L/second)
+- **Boost Pads**: Yellow zones that add +20 km/h speed bonus
+- **Pit Lane**: Full refuel option but costs significant time
+- **3 Lanes**: All lanes are equal distance (no lane advantage)
 
 ## 🔧 Technical Details
 
@@ -164,21 +168,24 @@ The `state` parameter contains:
 ```javascript
 state = {
     car: {
-        speed: 180,        // km/h
-        fuel: 75.5,        // liters remaining
+        speed: 180,        // km/h (0-300 max)
+        fuel: 75.5,        // liters remaining (0-100)
         lane: 1,           // 0=left, 1=middle, 2=right
-        lap: 2,            // current lap
-        position: 1234,    // meters from start
-        boosts: 2,         // boost charges left
-        isDrafting: false  // behind opponent?
+        lap: 2,            // current lap number
+        position: 1234,    // meters from start of current lap
+        boosts: 2,         // boost charges remaining
+        isDrafting: false, // true when behind opponent (5-25m)
+        draftEffectiveness: 0.8  // 0.0-1.0 drafting efficiency
     },
     opponent: {
-        distance: -15,     // negative = behind you
-        speed: 175,
-        lane: 2
+        distance: -15,     // meters (negative = they're behind you)
+        speed: 175,        // their current speed
+        lane: 2            // their current lane
     },
     track: {
-        ahead: [...]       // upcoming track segments
+        totalLaps: 3,      // number of laps to complete
+        lapDistance: 2000, // meters per lap
+        ahead: [...]       // array of upcoming 10m segments
     }
 }
 ```

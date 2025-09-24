@@ -2,10 +2,10 @@
 // Just drives forward and tries not to crash!
 //
 // TRACK ELEMENTS:
-// - Orange cones = OBSTACLES (avoid these or crash!)
+// - Orange cones = OBSTACLES (crash = 70% speed loss + 5L fuel damage!)
 // - Yellow zones = BOOST PADS (drive over for +20 km/h speed)
-// - Green zones = FUEL ZONES (drive through to refuel)
-// - Inner lane (0) is shorter, outer lane (2) is longer!
+// - Green zones = FUEL ZONES (drive through to refuel at 72L/sec)
+// - Fuel zones only exist in lanes 1-2 (middle and right lanes)
 
 class PlayerBot {
     decide(state, car) {

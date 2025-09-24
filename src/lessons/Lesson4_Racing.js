@@ -190,11 +190,11 @@ ADVANCED CHALLENGES:
 4. Win with >20 fuel remaining
 
 MATH & PHYSICS:
-- Drafting zone: 5-25 meters behind opponent
+- Drafting zone: 5-25 meters behind opponent saves up to 30% fuel
 - Collision zone: <5 meters (avoid!)
-- Boost acceleration: 20 km/h per tick
-- Sprint: 10 km/h per tick, 2.5 fuel
-- Accelerate: 5 km/h per tick, 1.0 fuel
+- Boost acceleration: 20 km/h per tick (uses boost charge + high fuel)
+- Sprint: 10 km/h per tick (~2.7L/sec, speed affects consumption)
+- Accelerate: 5 km/h per tick (~1.5L/sec, moderate fuel use)
 
 PSYCHOLOGICAL WARFARE:
 - Pressure opponents into mistakes
