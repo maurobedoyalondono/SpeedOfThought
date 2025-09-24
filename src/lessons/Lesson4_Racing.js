@@ -26,25 +26,60 @@ class PlayerBot {
         if (state.car.position % 50 < 1) {
             console.log("=== RACE STATUS ===");
             console.log("Opponent is", opponentAhead ? "AHEAD by" : "BEHIND by", distanceGap.toFixed(1), "meters");
-            console.log("Opponent speed:", state.opponent.speed, "km/h");
-            console.log("My speed:", state.car.speed, "km/h");
-            console.log("Opponent in lane:", state.opponent.lane);
+            console.log("Opponent speed:", state.opponent.speed, "km/h | My speed:", state.car.speed, "km/h");
+            console.log("Opponent in lane:", state.opponent.lane, "| My lane:", state.car.lane);
             if (state.car.isDrafting) {
-                console.log("DRAFTING! (saving fuel)");
+                console.log("🏎️ DRAFTING! Effectiveness:", (state.car.draftEffectiveness * 100).toFixed(0) + "% fuel savings");
             }
         }
 
-        // STRATEGY 1: Drafting
-        // If opponent is ahead and close, get behind them to save fuel!
-        if (opponentAhead && distanceGap < 30 && distanceGap > 5) {
-            // Try to get in their lane for drafting
+        // STRATEGY 1: Smart Drafting
+        // Drafting range: 5-25m behind opponent saves up to 30% fuel
+        // But be careful not to get TOO close (collision risk)
+        if (opponentAhead && distanceGap >= 8 && distanceGap <= 25) {
+            // Try to get in their lane for maximum drafting benefit
             if (state.opponent.lane !== state.car.lane) {
                 if (state.opponent.lane < state.car.lane) {
                     car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
                 } else {
                     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                 }
-                console.log("Moving to opponent's lane for drafting");
+                console.log("Moving to opponent's lane for drafting effectiveness:", (state.car.draftEffectiveness * 100).toFixed(0) + "%");
+                return; // Lane change takes priority
+            } else {
+                // Already in same lane - maintain drafting distance
+                if (distanceGap < 10) {
+                    car.executeAction(CAR_ACTIONS.COAST); // Don't get too close
+                    console.log("Coasting to maintain safe drafting distance");
+                } else {
+                    car.executeAction(CAR_ACTIONS.ACCELERATE); // Catch up slightly
+                }
+                return;
+            }
+        }
+
+        // DANGER ZONE: Too close to opponent (< 8m)
+        if (opponentAhead && distanceGap < 8) {
+            console.log("⚠️ TOO CLOSE! Risk of collision - finding overtake opportunity");
+            // Look for a clear lane to overtake
+            const availableLanes = [0, 1, 2].filter(lane => 
+                lane !== state.car.lane && lane !== state.opponent.lane
+            );
+            
+            if (availableLanes.length > 0) {
+                const overtakeLane = availableLanes[0];
+                if (overtakeLane < state.car.lane) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                } else {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                }
+                console.log("Attempting overtake via lane", overtakeLane);
+                return;
+            } else {
+                // No clear lane - back off slightly
+                car.executeAction(CAR_ACTIONS.COAST);
+                console.log("No clear overtake lane - maintaining distance");
+                return;
             }
         }
 

@@ -54,16 +54,17 @@ class PlayerBot {
         }
 
         // ADVANCED CONCEPT 2: Pit stop decision
-        // Check if we're near pit entry and need fuel
-        const nearPitEntry = Math.abs(state.car.position - state.track.pitLaneEntry) < 200;
+        // Note: Check if pit lane exists in this track configuration
+        const nearPitEntry = state.track.pitLaneEntry && 
+                            Math.abs(state.car.position - state.track.pitLaneEntry) < 200;
 
         if (nearPitEntry && !state.car.isInPitLane) {
             // Should we pit?
-            const canFinishWithoutPit = state.car.fuel > estimatedFuelNeeded * 1.1;
+            const canFinishWithoutPit = state.car.fuel > estimatedFuelNeeded * 1.2;
 
             if (!canFinishWithoutPit && lapsRemaining > 1) {
                 car.executeAction(CAR_ACTIONS.ENTER_PIT);
-                console.log("ENTERING PIT LANE!");
+                console.log("🏁 ENTERING PIT LANE! Full refuel but ~5 second penalty");
                 this.raceData.pitStopPlanned = false;
             }
         }
@@ -101,7 +102,7 @@ class PlayerBot {
 
     calculateAverageFuelPerLap() {
         if (this.raceData.fuelUsedPerLap.length === 0) {
-            return 25; // Initial estimate
+            return 35; // Updated realistic estimate based on current fuel consumption
         }
         const total = this.raceData.fuelUsedPerLap.reduce((a, b) => a + b, 0);
         return total / this.raceData.fuelUsedPerLap.length;
@@ -192,13 +193,19 @@ class PlayerBot {
 
     fuelSavingStrategy(state, car) {
         // Maximum fuel efficiency
-        if (state.car.isDrafting) {
-            // Drafting saves fuel!
+        if (state.car.isDrafting && state.car.draftEffectiveness > 0.5) {
+            // Good drafting saves significant fuel!
             car.executeAction(CAR_ACTIONS.COAST);
+            console.log("Drafting efficiently:", (state.car.draftEffectiveness * 100).toFixed(0) + "% savings");
         } else if (state.car.speed < 150) {
             car.executeAction(CAR_ACTIONS.ACCELERATE);
         } else {
             car.executeAction(CAR_ACTIONS.COAST);
+        }
+
+        // Prioritize fuel zones if fuel is critically low
+        if (state.car.fuel < 20) {
+            this.seekFuelZones(state, car);
         }
     }
 
@@ -276,23 +283,47 @@ class PlayerBot {
     }
 
     seekBoostPads(state, car) {
-        // Look for nearby boost pads
+        // Look for nearby boost pads (yellow zones)
         for (let i = 0; i < Math.min(2, state.track.ahead.length); i++) {
             if (state.track.ahead[i].type === 'boost_zone') {
                 const items = state.track.ahead[i].items;
                 if (items && items.length > 0) {
                     const boostLane = items[0].lane;
                     if (typeof boostLane === 'number' && boostLane !== state.car.lane && i < 2) {
-                        // Move to boost pad
+                        // Move to boost pad for free +20 km/h
                         if (boostLane < state.car.lane) {
                             car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
                         } else {
                             car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                         }
-                        console.log("Moving to boost pad!");
+                        console.log("🚀 Moving to boost pad for +20 km/h!");
                         break;
                     }
                 }
+            }
+        }
+    }
+
+    seekFuelZones(state, car) {
+        // Look for fuel zones - they're only in lanes 1 and 2!
+        for (let i = 0; i < Math.min(3, state.track.ahead.length); i++) {
+            if (state.track.ahead[i].type === 'fuel_zone') {
+                console.log("⛽ Fuel zone ahead! Remember: lanes 1-2 only, refuel at 72L/sec");
+                
+                // Are we in a fuel-accessible lane?
+                if (state.car.lane === 0) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                    console.log("Moving from lane 0 to access fuel zone");
+                    return;
+                }
+                
+                // If we're in a fuel zone, slow down to maximize refuel time
+                if (i === 0) {
+                    car.executeAction(CAR_ACTIONS.BRAKE);
+                    console.log("Braking in fuel zone to maximize refuel time");
+                    return;
+                }
+                break;
             }
         }
     }

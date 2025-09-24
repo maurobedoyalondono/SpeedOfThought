@@ -15,9 +15,10 @@ class PlayerBot {
 
         // CONCEPT: The track has 3 lanes (0, 1, 2)
         // Lane 0 = Left lane
-        // Lane 1 = Middle lane
+        // Lane 1 = Middle lane  
         // Lane 2 = Right lane
-        console.log("Current lane:", state.car.lane);
+        // IMPORTANT: Fuel zones only exist in lanes 1 and 2!
+        console.log("Current lane:", state.car.lane, "- Remember: fuel zones are in lanes 1-2 only");
 
         // STEP 1: Check for obstacles directly ahead
         if (state.track.ahead[0].obstacles && state.track.ahead[0].obstacles.length > 0) {
@@ -27,30 +28,40 @@ class PlayerBot {
 
             if (obstacle.lane === state.car.lane) {
                 // The obstacle is in our lane!
-                console.log("Obstacle in my lane - need to avoid!");
+                console.log("DANGER! Obstacle in my lane - CRASH = 70% speed loss + 5L fuel damage!");
 
-                // OPTION 1: Change lanes
+                // Smart lane selection considering fuel zones
+                let targetLane = null;
+                
                 if (state.car.lane === 0) {
-                    // We're in left lane, go right
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-                    console.log("Moving right to avoid!");
+                    // We're in left lane, must go right
+                    targetLane = 1; // Go to middle lane (has fuel zones)
                 } else if (state.car.lane === 2) {
-                    // We're in right lane, go left
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                    console.log("Moving left to avoid!");
+                    // We're in right lane, go left but prefer lane with fuel
+                    targetLane = state.car.fuel < 60 ? 1 : 0; // Go to middle if low fuel
                 } else {
-                    // We're in middle lane - pick a direction
-                    // For now, let's go left
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                    console.log("Moving left from middle!");
+                    // We're in middle lane - pick best option
+                    targetLane = state.car.fuel < 60 ? 2 : 0; // Stay in fuel-accessible lanes if low fuel
                 }
 
+                // Execute the lane change
+                if (targetLane < state.car.lane) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                    console.log("Moving left to lane", targetLane);
+                } else {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                    console.log("Moving right to lane", targetLane);
+                }
+
+                return; // Don't do anything else this tick
+
                 // OPTION 2: Jump over it!
-                // Uncomment to try jumping instead
-                // if (this.jumpCooldown === 0) {
+                // Jumping costs 5L fuel but works from any lane
+                // if (this.jumpCooldown === 0 && state.car.fuel > 20) {
                 //     car.executeAction(CAR_ACTIONS.JUMP);
                 //     this.jumpCooldown = 15; // Can't jump again for 15 ticks
-                //     console.log("JUMPING over obstacle!");
+                //     console.log("JUMPING over obstacle! Costs 5L fuel");
+                //     return; // Don't do anything else this tick
                 // }
             }
         }
@@ -111,25 +122,24 @@ LANES:
 - Lane changes take about 5 ticks to complete
 
 OBSTACLES:
-- Orange cones block your path
-- Hit an obstacle = lose speed and fuel
-- Each obstacle is in a specific lane
+- Orange cones that cause 70% speed reduction + 5L fuel damage + 0.5 second stun
+- Each obstacle is in a specific lane (0, 1, or 2)
+- You get a 5-tick cooldown between collisions
 
 AVOIDANCE STRATEGIES:
-1. Change lanes (smooth and safe)
-2. Jump over (costs 5 fuel, works from any lane)
+1. Change lanes (smooth, takes 5 ticks to complete)
+2. Jump over (costs 5L fuel, works from any lane, lasts 10 ticks)
 
 NEW ACTIONS:
-- CAR_ACTIONS.CHANGE_LANE_LEFT - Move one lane left
-- CAR_ACTIONS.CHANGE_LANE_RIGHT - Move one lane right
-- CAR_ACTIONS.JUMP - Jump over obstacles (costs 5 fuel)
+- CAR_ACTIONS.CHANGE_LANE_LEFT - Move one lane left (takes 5 ticks)
+- CAR_ACTIONS.CHANGE_LANE_RIGHT - Move one lane right (takes 5 ticks)  
+- CAR_ACTIONS.JUMP - Jump over obstacles (costs 5L fuel, lasts 10 ticks)
 
-TIPS:
-1. Look ahead - don't wait until the last second
-2. Middle lane gives you more escape options
-3. Jumping costs fuel but works from any lane
-4. You can't change lanes while jumping
-5. Plan your route to minimize lane changes
+STRATEGIC CONSIDERATIONS:
+- Lane changes are free but take time
+- Jumping costs fuel but is instant
+- Consider fuel zone access when choosing lanes (lanes 1-2 only)
+- Middle lane gives you escape options in both directions
 
 ADVANCED CHALLENGE:
 Complete a lap without jumping (only lane changes)

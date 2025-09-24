@@ -35,12 +35,27 @@ class PlayerBot {
         }
 
         // TIP: Look for fuel zones on the track!
-        // Check what's ahead of you:
+        // Fuel zones are GREEN and only exist in lanes 1 and 2 (middle and right)
         for (let i = 0; i < state.track.ahead.length; i++) {
             if (state.track.ahead[i].type === 'fuel_zone') {
-                console.log("Fuel zone ahead at distance:", state.track.ahead[i].distance);
-                // When you drive through a fuel zone, you'll refuel!
+                console.log("Fuel zone ahead at segment", i, "- Remember: fuel zones are in lanes 1-2 only!");
+                
+                // Are we in the right lane for refueling?
+                if (state.car.lane === 0) {
+                    console.log("I'm in lane 0 - need to change lanes to reach fuel zone!");
+                }
                 break;
+            }
+        }
+
+        // ADVANCED TIP: Check if we're currently IN a fuel zone
+        if (state.track.ahead[0] && state.track.ahead[0].type === 'fuel_zone') {
+            console.log("I'm in a fuel zone! Refueling at 72L/second");
+            // Slow down to stay in the fuel zone longer!
+            if (state.car.fuel < 80) {
+                car.executeAction(CAR_ACTIONS.BRAKE); // Stay longer to refuel more
+                console.log("Braking to maximize refuel time");
+                return; // Don't execute other actions
             }
         }
 
@@ -52,15 +67,29 @@ class PlayerBot {
 
         // CHALLENGE 2: Sprint when you have extra fuel
         // if (state.car.fuel > 80) {
-        //     car.executeAction(CAR_ACTIONS.SPRINT);
+        //     car.executeAction(CAR_ACTIONS.SPRINT); // Go very fast!
         // }
 
-        // CHALLENGE 3: Calculate if you can finish the race
+        // CHALLENGE 3: Smart lane changing for fuel zones
+        // if (state.car.fuel < 60 && state.car.lane === 0) {
+        //     console.log("Low fuel and in lane 0 - changing to lane 1 for fuel access");
+        //     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+        //     return; // Lane changes take priority
+        // }
+
+        // CHALLENGE 4: Calculate fuel efficiency
+        // if (this.totalTicks % 60 === 0) {
+        //     const fuelUsedThisSecond = 100 - state.car.fuel; // Very rough estimate
+        //     console.log("Rough fuel efficiency check - Fuel left:", state.car.fuel);
+        // }
+
+        // CHALLENGE 5: Emergency fuel management
         // const lapsRemaining = state.track.totalLaps - state.car.lap + 1;
-        // const fuelPerLap = 30; // Estimate
-        // const fuelNeeded = lapsRemaining * fuelPerLap;
+        // const estimatedFuelPerLap = 35; // This is a guess - you need to measure!
+        // const fuelNeeded = lapsRemaining * estimatedFuelPerLap;
         // if (fuelNeeded > state.car.fuel) {
-        //     console.log("Warning: May not have enough fuel!");
+        //     console.log("WARNING: May not have enough fuel to finish!");
+        //     car.executeAction(CAR_ACTIONS.COAST); // Emergency conservation
         // }
     }
 }
