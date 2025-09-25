@@ -24,7 +24,6 @@ class PlayerBot {
 - `CHANGE_LANE_LEFT` - Move one lane left (takes 5 ticks to complete)
 - `CHANGE_LANE_RIGHT` - Move one lane right (takes 5 ticks to complete)
 - `JUMP` - Jump over obstacles for 10 ticks (5L fuel cost)
-- `ENTER_PIT` - Enter pit lane for full refuel (time penalty)
 
 ## Game State Object
 

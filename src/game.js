@@ -1332,104 +1332,138 @@ class BotSandbox {
     }
 
     async loadBot(botCode) {
-        // Create worker code
         const workerCode = `
             let botInstance = null;
-            let PlayerBot = null;
-
-            // Capture console.log output and forward to main thread
-            const originalConsole = {
-                log: console.log,
-                error: console.error,
-                warn: console.warn,
-                info: console.info
-            };
-
-            console.log = function(...args) {
-                originalConsole.log.apply(console, args);
-                self.postMessage({
-                    type: 'CONSOLE',
-                    level: 'log',
-                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
-                });
-            };
-
-            console.error = function(...args) {
-                originalConsole.error.apply(console, args);
-                self.postMessage({
-                    type: 'CONSOLE',
-                    level: 'error',
-                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
-                });
-            };
-
-            console.warn = function(...args) {
-                originalConsole.warn.apply(console, args);
-                self.postMessage({
-                    type: 'CONSOLE',
-                    level: 'warn',
-                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
-                });
-            };
-
-            console.info = function(...args) {
-                originalConsole.info.apply(console, args);
-                self.postMessage({
-                    type: 'CONSOLE',
-                    level: 'info',
-                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
-                });
-            };
-
-            // CarController for bot use
+            
             ${CarController.toString()}
-
-            // CAR_ACTIONS enum
             const CAR_ACTIONS = ${JSON.stringify(CAR_ACTIONS)};
-
-            // Message handler
+            
+            // Helper function to add state methods
+            function enhanceState(state) {
+                // Add helper methods that were stripped during JSON serialization
+                state.getObstaclesAhead = () => {
+                    const obstacles = [];
+                    if (state.track && state.track.ahead) {
+                        for (let i = 0; i < Math.min(5, state.track.ahead.length); i++) {
+                            const segment = state.track.ahead[i];
+                            if (segment.obstacles) {
+                                for (let obstacle of segment.obstacles) {
+                                    obstacles.push({
+                                        lane: obstacle.lane,
+                                        distance: i * 10,
+                                        type: 'obstacle'
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    return obstacles;
+                };
+                
+                state.getFuelStationsAhead = () => {
+                    const fuelStations = [];
+                    if (state.track && state.track.ahead) {
+                        for (let i = 0; i < Math.min(10, state.track.ahead.length); i++) {
+                            const segment = state.track.ahead[i];
+                            if (segment.type === 'fuel_zone' && segment.items) {
+                                for (let item of segment.items) {
+                                    if (item.lanes) {
+                                        for (let lane of item.lanes) {
+                                            fuelStations.push({
+                                                lane: lane,
+                                                distance: i * 10,
+                                                type: 'fuel_station'
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return fuelStations;
+                };
+                
+                state.getBoostPadsAhead = () => {
+                    const boostPads = [];
+                    if (state.track && state.track.ahead) {
+                        for (let i = 0; i < Math.min(5, state.track.ahead.length); i++) {
+                            const segment = state.track.ahead[i];
+                            if (segment.type === 'boost_zone' && segment.items) {
+                                for (let item of segment.items) {
+                                    if (item.lanes) {
+                                        for (let lane of item.lanes) {
+                                            boostPads.push({
+                                                lane: lane,
+                                                distance: i * 10,
+                                                type: 'boost_pad'
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return boostPads;
+                };
+                
+                state.isLaneSafe = (lane) => {
+                    if (lane < 0 || lane > 2) return false;
+                    if (state.car.changingLane) return false;
+                    if (lane === state.car.lane) return true;
+                    
+                    const obstacles = state.getObstaclesAhead();
+                    for (let obstacle of obstacles) {
+                        if (obstacle.lane === lane && obstacle.distance < 30) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                
+                state.hasObstacleAhead = () => {
+                    const obstacles = state.getObstaclesAhead();
+                    return obstacles.some(obs => obs.lane === state.car.lane);
+                };
+                
+                state.hasFuelStationAhead = () => {
+                    const fuelStations = state.getFuelStationsAhead();
+                    return fuelStations.some(fuel => fuel.lane === state.car.lane);
+                };
+                
+                state.hasBoostPadAhead = () => {
+                    const boostPads = state.getBoostPadsAhead();
+                    return boostPads.some(boost => boost.lane === state.car.lane);
+                };
+                
+                return state;
+            }
+            
+            // Bot code injected directly
+            ${botCode}
+            
             self.onmessage = function(e) {
                 if (e.data.type === 'INIT') {
                     try {
-                        // Load the bot code
-                        const botScript = e.data.botCode;
-
-                        // Wrap the bot code to ensure PlayerBot is captured
-                        const wrappedCode = botScript + '; self.PlayerBot = PlayerBot;';
-
-                        // Execute the bot code
-                        eval(wrappedCode);
-
-                        // Now PlayerBot should be available
-                        if (self.PlayerBot) {
-                            PlayerBot = self.PlayerBot;
+                        if (typeof PlayerBot === 'function') {
                             botInstance = new PlayerBot();
                             self.postMessage({ type: 'READY' });
                         } else {
-                            throw new Error('PlayerBot class not found after evaluation');
+                            self.postMessage({ 
+                                type: 'ERROR', 
+                                error: 'PlayerBot class not found after evaluation'
+                            });
                         }
                     } catch (error) {
                         self.postMessage({
                             type: 'ERROR',
-                            errorType: 'INITIALIZATION',
-                            error: error.message,
-                            stack: error.stack || 'No stack trace available'
+                            error: error.message
                         });
                     }
                 } else if (e.data.type === 'DECIDE') {
-                    if (!botInstance) {
-                        self.postMessage({
-                            type: 'ERROR',
-                            errorType: 'RUNTIME',
-                            error: 'Bot not initialized',
-                            stack: 'Bot was not properly loaded'
-                        });
-                        return;
-                    }
-
                     try {
                         const car = new CarController();
-                        botInstance.decide(e.data.state, car);
+                        const enhancedState = enhanceState(e.data.state);
+                        botInstance.decide(enhancedState, car);
                         self.postMessage({
                             type: 'DECISION',
                             actions: car.getExecutionPlan()
@@ -1437,9 +1471,7 @@ class BotSandbox {
                     } catch (error) {
                         self.postMessage({
                             type: 'ERROR',
-                            errorType: 'RUNTIME',
-                            error: error.message,
-                            stack: error.stack || 'No stack trace available'
+                            error: error.message
                         });
                     }
                 }
