@@ -1754,7 +1754,7 @@ class RaceEngine {
         const opponent = gameState[opponentId];
 
         // Create state for bot
-        return {
+        const state = {
             car: {
                 position: myCar.position,
                 lane: myCar.lane,
@@ -1763,7 +1763,8 @@ class RaceEngine {
                 fuel: myCar.fuel,
                 boosts: myCar.boosts,
                 isDrafting: myCar.isDrafting,
-                isJumping: myCar.isJumping
+                isJumping: myCar.isJumping,
+                changingLane: myCar.changingLane || false
             },
             opponent: {
                 distance: myCar.opponentDistance,
@@ -1778,6 +1779,104 @@ class RaceEngine {
                 totalLaps: this.totalLaps
             }
         };
+
+        // COMPLETE TRACK VISIBILITY - See EVERYTHING ahead in ALL lanes
+        
+        // "What obstacles are coming up?" - ALL obstacles in ALL lanes as proper objects
+        state.getObstaclesAhead = () => {
+            const trackAhead = this.getTrackAhead(myCar.position);
+            const obstacles = [];
+            for (let i = 0; i < Math.min(5, trackAhead.length); i++) {
+                const segment = trackAhead[i];
+                for (let obstacle of segment.obstacles) {
+                    obstacles.push({
+                        lane: obstacle.lane,
+                        distance: i * 10, // segments ahead * 10m per segment
+                        type: 'obstacle'
+                    });
+                }
+            }
+            return obstacles;
+        };
+
+        // "Where are the fuel stations?" - ALL fuel stations in ALL lanes as proper objects
+        state.getFuelStationsAhead = () => {
+            const trackAhead = this.getTrackAhead(myCar.position);
+            const fuelStations = [];
+            for (let i = 0; i < Math.min(10, trackAhead.length); i++) {
+                const segment = trackAhead[i];
+                if (segment.type === 'fuel_zone') {
+                    for (let item of segment.items) {
+                        if (item.lanes) {
+                            for (let lane of item.lanes) {
+                                fuelStations.push({
+                                    lane: lane,
+                                    distance: i * 10,
+                                    type: 'fuel_station'
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return fuelStations;
+        };
+
+        // "Where are the boost pads?" - ALL boost pads in ALL lanes as proper objects
+        state.getBoostPadsAhead = () => {
+            const trackAhead = this.getTrackAhead(myCar.position);
+            const boostPads = [];
+            for (let i = 0; i < Math.min(5, trackAhead.length); i++) {
+                const segment = trackAhead[i];
+                if (segment.type === 'boost_zone') {
+                    for (let item of segment.items) {
+                        if (item.lanes) {
+                            for (let lane of item.lanes) {
+                                boostPads.push({
+                                    lane: lane,
+                                    distance: i * 10,
+                                    type: 'boost_pad'
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return boostPads;
+        };
+
+        // "Is this lane safe to move to?" - still useful for quick checks
+        state.isLaneSafe = (lane) => {
+            if (lane < 0 || lane > 2) return false;
+            if (myCar.changingLane) return false;
+            if (lane === myCar.lane) return true;
+            
+            const obstacles = state.getObstaclesAhead();
+            for (let obstacle of obstacles) {
+                if (obstacle.lane === lane && obstacle.distance < 30) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        // Simple convenience methods for your current lane
+        state.hasObstacleAhead = () => {
+            const obstacles = state.getObstaclesAhead();
+            return obstacles.some(obs => obs.lane === myCar.lane);
+        };
+
+        state.hasFuelStationAhead = () => {
+            const fuelStations = state.getFuelStationsAhead();
+            return fuelStations.some(fuel => fuel.lane === myCar.lane);
+        };
+
+        state.hasBoostPadAhead = () => {
+            const boostPads = state.getBoostPadsAhead();
+            return boostPads.some(boost => boost.lane === myCar.lane);
+        };
+
+        return state;
     }
 
     getTrackAhead(position) {

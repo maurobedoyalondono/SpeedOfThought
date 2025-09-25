@@ -20,35 +20,72 @@ class PlayerBot {
         // IMPORTANT: Fuel zones only exist in lanes 1 and 2!
         console.log("Current lane:", state.car.lane, "- Remember: fuel zones are in lanes 1-2 only");
 
-        // STEP 1: Check for obstacles directly ahead
-        if (state.track.ahead[0].obstacles && state.track.ahead[0].obstacles.length > 0) {
-            // There's an obstacle in the next segment!
-            const obstacle = state.track.ahead[0].obstacles[0];
-            console.log("OBSTACLE in lane", obstacle.lane, "- I'm in lane", state.car.lane);
+        // STEP 1: Check for obstacles using NEW helper methods!
+        
+        // Get ALL obstacles on the track ahead
+        const obstacles = state.getObstaclesAhead();
+        console.log("I can see", obstacles.length, "obstacles ahead:", obstacles);
+        
+        // Check if there's an obstacle in my current lane
+        if (state.hasObstacleAhead()) {
+            console.log("DANGER! Obstacle in my lane - need to dodge!");
+            
+            // Find obstacles in my lane
+            const myObstacles = obstacles.filter(obs => obs.lane === state.car.lane && obs.distance < 30);
+            
+            if (myObstacles.length > 0) {
+                const nearestObstacle = myObstacles[0];
+                console.log(`Nearest obstacle in lane ${nearestObstacle.lane} at ${nearestObstacle.distance}m`);
 
-            if (obstacle.lane === state.car.lane) {
-                // The obstacle is in our lane!
-                console.log("DANGER! Obstacle in my lane - CRASH = 70% speed loss + 5L fuel damage!");
-
-                // Smart lane selection considering fuel zones
-                let targetLane = null;
-                
-                if (state.car.lane === 0) {
-                    // We're in left lane, must go right
-                    targetLane = 1; // Go to middle lane (has fuel zones)
-                } else if (state.car.lane === 2) {
-                    // We're in right lane, go left but prefer lane with fuel
-                    targetLane = state.car.fuel < 60 ? 1 : 0; // Go to middle if low fuel
-                } else {
-                    // We're in middle lane - pick best option
-                    targetLane = state.car.fuel < 60 ? 2 : 0; // Stay in fuel-accessible lanes if low fuel
+                // Option 1: Jump over it (if we have fuel)
+                if (state.car.fuel > 15 && this.jumpCooldown === 0) {
+                    console.log("Jumping over obstacle!");
+                    car.executeAction(CAR_ACTIONS.JUMP);
+                    this.jumpCooldown = 20; // Wait before next jump
+                    return;
                 }
-
-                // Execute the lane change
-                if (targetLane < state.car.lane) {
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                    console.log("Moving left to lane", targetLane);
+                
+                // Option 2: Change lanes strategically
+                let bestLane = -1;
+                let bestScore = -1;
+                
+                for (let lane = 0; lane <= 2; lane++) {
+                    if (lane === state.car.lane) continue;
+                    if (!state.isLaneSafe(lane)) continue;
+                    
+                    // Score lanes based on obstacles and fuel stations
+                    const laneObstacles = obstacles.filter(obs => obs.lane === lane && obs.distance < 50);
+                    const fuelStations = state.getFuelStationsAhead();
+                    const laneFuel = fuelStations.filter(f => f.lane === lane && f.distance < 100);
+                    
+                    let score = 100 - (laneObstacles.length * 20);
+                    if (state.car.fuel < 60) {
+                        score += (laneFuel.length * 15); // Bonus for fuel access when low
+                    }
+                    
+                    console.log(`Lane ${lane} score: ${score} (obstacles: ${laneObstacles.length}, fuel: ${laneFuel.length})`);
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestLane = lane;
+                    }
+                }
+                
+                if (bestLane !== -1) {
+                    console.log(`Strategic dodge to lane ${bestLane}!`);
+                    if (bestLane < state.car.lane) {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                    } else {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                    }
+                    return;
                 } else {
+                    console.log("No safe lanes - emergency brake!");
+                    car.executeAction(CAR_ACTIONS.BRAKE);
+                    return;
+                }
+            }
+        }
                     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                     console.log("Moving right to lane", targetLane);
                 }

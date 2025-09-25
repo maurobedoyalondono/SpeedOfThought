@@ -9,15 +9,7 @@ class PlayerBot {
         car.executeAction(CAR_ACTIONS.JUMP);
     }
 
-    if (state.car.lane !== 0) {
-        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-    }
-
-    if (state.car.lap === state.track.totalLaps) {
-      car.executeAction(CAR_ACTIONS.BOOST);
-    } else {
-      car.executeAction(CAR_ACTIONS.ACCELERATE);
-    }
+    car.executeAction(CAR_ACTIONS.ACCELERATE);
   }
 
   isObstacleInFront(state, currentLane) {

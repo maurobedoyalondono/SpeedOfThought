@@ -35,6 +35,18 @@ class PlayerBot {
         // } else {
         //     car.executeAction(CAR_ACTIONS.ACCELERATE); // Speed up
         // }
+
+        // NEW CHALLENGE 5: Use helper methods to see what's ahead!
+        // Uncomment these lines to see complete track information
+        // const obstacles = state.getObstaclesAhead();
+        // const fuelStations = state.getFuelStationsAhead();
+        // const boostPads = state.getBoostPadsAhead();
+        // console.log("I can see:", obstacles.length, "obstacles,", fuelStations.length, "fuel stations,", boostPads.length, "boost pads");
+
+        // NEW CHALLENGE 6: Simple obstacle detection
+        // if (state.hasObstacleAhead()) {
+        //     console.log("Obstacle in my lane! Consider changing lanes or jumping!");
+        // }
     }
 }
 
@@ -59,10 +71,20 @@ WHAT YOU CAN CHECK:
 - state.car.lap - What lap you're on (starts at 1)
 - state.track.totalLaps - How many laps in the race (usually 3)
 
+NEW: HELPER METHODS TO SEE EVERYTHING!
+- state.getObstaclesAhead() - Array of ALL obstacles in ALL lanes: [{ lane: 0, distance: 20, type: 'obstacle' }, ...]
+- state.getFuelStationsAhead() - Array of ALL fuel stations: [{ lane: 1, distance: 80, type: 'fuel_station' }, ...]
+- state.getBoostPadsAhead() - Array of ALL boost pads: [{ lane: 2, distance: 40, type: 'boost_pad' }, ...]
+- state.hasObstacleAhead() - True if obstacle in your current lane
+- state.hasFuelStationAhead() - True if fuel station in your current lane
+- state.hasBoostPadAhead() - True if boost pad in your current lane
+- state.isLaneSafe(lane) - True if you can safely move to that lane
+
 EXPERIMENT:
 1. Try different actions and watch the fuel gauge
 2. See how SPRINT makes you faster but uses lots of fuel
 3. Notice how COAST maintains speed while saving fuel
 4. Try to complete a lap - the track is 2000 meters long!
 5. Watch what happens when you run out of fuel
+6. NEW: Use helper methods to see what's coming on the track!
 */

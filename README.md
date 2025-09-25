@@ -186,6 +186,83 @@ state = {
         totalLaps: 3,      // number of laps to complete
         lapDistance: 2000, // meters per lap
         ahead: [...]       // array of upcoming 10m segments
+    },
+
+    // NEW HELPER METHODS - See everything on the track!
+    
+    // Get ALL obstacles in ALL lanes ahead
+    getObstaclesAhead: () => [
+        { lane: 0, distance: 20, type: 'obstacle' },
+        { lane: 1, distance: 30, type: 'obstacle' },
+        { lane: 2, distance: 50, type: 'obstacle' }
+    ],
+    
+    // Get ALL fuel stations in ALL lanes ahead
+    getFuelStationsAhead: () => [
+        { lane: 1, distance: 80, type: 'fuel_station' },
+        { lane: 0, distance: 120, type: 'fuel_station' }
+    ],
+    
+    // Get ALL boost pads in ALL lanes ahead
+    getBoostPadsAhead: () => [
+        { lane: 2, distance: 40, type: 'boost_pad' }
+    ],
+    
+    // Convenience methods for your current lane
+    hasObstacleAhead: () => true,      // boolean - obstacle in my lane?
+    hasFuelStationAhead: () => false,  // boolean - fuel in my lane?
+    hasBoostPadAhead: () => true,      // boolean - boost in my lane?
+    isLaneSafe: (lane) => true         // boolean - can I move to this lane?
+}
+```
+
+### NEW: Complete Track Visibility
+
+Now you can see EVERYTHING on the track ahead! Use these helper methods to build smart racing strategies:
+
+```javascript
+class PlayerBot {
+    decide(state, car) {
+        // See all obstacles in all lanes
+        const obstacles = state.getObstaclesAhead();
+        console.log("Obstacles:", obstacles);
+        // Output: [{ lane: 0, distance: 20, type: 'obstacle' }, ...]
+        
+        // Strategic lane choice based on complete information
+        const myObstacles = obstacles.filter(obs => obs.lane === state.car.lane);
+        if (myObstacles.length > 0) {
+            // Find safest lane
+            for (let lane = 0; lane <= 2; lane++) {
+                if (state.isLaneSafe(lane)) {
+                    // Move to safe lane
+                    if (lane < state.car.lane) {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                    } else {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // Check for fuel stations
+        const fuelStations = state.getFuelStationsAhead();
+        const nearFuel = fuelStations.filter(f => f.lane === state.car.lane && f.distance < 50);
+        if (nearFuel.length > 0 && state.car.fuel < 60) {
+            car.executeAction(CAR_ACTIONS.COAST); // Slow down to refuel more
+            return;
+        }
+        
+        // Check for boost pads
+        const boostPads = state.getBoostPadsAhead();
+        const nearBoosts = boostPads.filter(b => b.lane === state.car.lane && b.distance < 40);
+        if (nearBoosts.length > 0) {
+            car.executeAction(CAR_ACTIONS.SPRINT); // Speed up to hit boost
+            return;
+        }
+        
+        // Default action
+        car.executeAction(CAR_ACTIONS.ACCELERATE);
     }
 }
 ```
