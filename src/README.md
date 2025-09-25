@@ -50,7 +50,7 @@ Opponent car information:
 Track information:
 - `totalLaps` - Number of laps to complete
 - `lapDistance` - Distance per lap (meters)
-- `ahead` - Array of upcoming track segments (10m each)
+- `ahead` - Array of upcoming track segments (20 segments, 10m each, covers 200m ahead)
 
 ### Track Segments
 Each segment in `state.track.ahead[]` contains:

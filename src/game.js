@@ -151,8 +151,6 @@ class TrackGenerator {
         const rng = new SeededRandom(seed);
         const segments = Math.floor(this.trackLength / 10); // 10 meter segments
 
-        console.log(`TrackGenerator: Generating track with ${this.fuelStationCount} fuel stations`);
-
         const track = {
             segments: [],
             lapDistance: this.trackLength,
@@ -214,7 +212,6 @@ class TrackGenerator {
                 // Only add to fuelStations array once per station (at first segment only)
                 if (isFirstSegmentOfFuelStation) {
                     track.fuelStations.push(i * 10);
-                    console.log(`Adding fuel station at segment ${i}, position ${i * 10}, lane ${assignedLane}`);
                 }
             } else {
                 // Otherwise, generate other features
@@ -248,10 +245,6 @@ class TrackGenerator {
 
             track.segments.push(segment);
         }
-
-        console.log(`TrackGenerator: Requested ${this.fuelStationCount} fuel stations`);
-        console.log(`TrackGenerator: Generated positions:`, fuelPositions.map((pos, i) => `Station ${i+1}: segment ${pos}, lane ${fuelLanes[i]}`));
-        console.log(`TrackGenerator: Final track has ${track.fuelStations.length} fuel stations at positions:`, track.fuelStations);
 
         return track;
     }
@@ -480,15 +473,15 @@ class PhysicsEngine {
 
     handleLaneChange(car, action) {
         if (action.lane === CAR_ACTIONS.CHANGE_LANE_LEFT) {
-            if (car.lane > 0 && !car.changingLane) {
-                car.changingLane = true;
-                car.targetLane = car.lane - 1;
-                car.laneChangeProgress = 0;
-            }
-        } else if (action.lane === CAR_ACTIONS.CHANGE_LANE_RIGHT) {
             if (car.lane < 2 && !car.changingLane) {
                 car.changingLane = true;
                 car.targetLane = car.lane + 1;
+                car.laneChangeProgress = 0;
+            }
+        } else if (action.lane === CAR_ACTIONS.CHANGE_LANE_RIGHT) {
+            if (car.lane > 0 && !car.changingLane) {
+                car.changingLane = true;
+                car.targetLane = car.lane - 1;
                 car.laneChangeProgress = 0;
             }
         }
@@ -621,7 +614,6 @@ class PhysicsEngine {
                             }
 
                             // No lane change - just keep going straight
-                            console.log(`CRASH! Car hit obstacle but keeps lane ${car.lane}`);
                         }
                     }
                 });
@@ -637,10 +629,6 @@ class PhysicsEngine {
                             const fuelBefore = car.fuel;
                             car.fuel = Math.min(100, car.fuel + refuelRate);
                             car.isRefueling = true; // Track refueling state
-
-                            if (car.fuel > fuelBefore) {
-                                console.log(`Refueling: ${fuelBefore.toFixed(1)} -> ${car.fuel.toFixed(1)}`);
-                            }
                         }
                     }
                 });
@@ -671,8 +659,6 @@ class PhysicsEngine {
                             if (car.usedBoostPads.length > 20) {
                                 car.usedBoostPads = car.usedBoostPads.slice(-10);
                             }
-
-                            console.log(`Car hit boost pad! Speed: ${car.speed.toFixed(0)} km/h`);
                         } else if (car.usedBoostPads.includes(padId)) {
                             // Still on the same boost pad but already used it
                             car.onBoostPad = true;
@@ -1351,6 +1337,50 @@ class BotSandbox {
             let botInstance = null;
             let PlayerBot = null;
 
+            // Capture console.log output and forward to main thread
+            const originalConsole = {
+                log: console.log,
+                error: console.error,
+                warn: console.warn,
+                info: console.info
+            };
+
+            console.log = function(...args) {
+                originalConsole.log.apply(console, args);
+                self.postMessage({
+                    type: 'CONSOLE',
+                    level: 'log',
+                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
+                });
+            };
+
+            console.error = function(...args) {
+                originalConsole.error.apply(console, args);
+                self.postMessage({
+                    type: 'CONSOLE',
+                    level: 'error',
+                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
+                });
+            };
+
+            console.warn = function(...args) {
+                originalConsole.warn.apply(console, args);
+                self.postMessage({
+                    type: 'CONSOLE',
+                    level: 'warn',
+                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
+                });
+            };
+
+            console.info = function(...args) {
+                originalConsole.info.apply(console, args);
+                self.postMessage({
+                    type: 'CONSOLE',
+                    level: 'info',
+                    message: args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ')
+                });
+            };
+
             // CarController for bot use
             ${CarController.toString()}
 
@@ -1381,14 +1411,18 @@ class BotSandbox {
                     } catch (error) {
                         self.postMessage({
                             type: 'ERROR',
-                            error: error.message
+                            errorType: 'INITIALIZATION',
+                            error: error.message,
+                            stack: error.stack || 'No stack trace available'
                         });
                     }
                 } else if (e.data.type === 'DECIDE') {
                     if (!botInstance) {
                         self.postMessage({
                             type: 'ERROR',
-                            error: 'Bot not initialized'
+                            errorType: 'RUNTIME',
+                            error: 'Bot not initialized',
+                            stack: 'Bot was not properly loaded'
                         });
                         return;
                     }
@@ -1403,7 +1437,9 @@ class BotSandbox {
                     } catch (error) {
                         self.postMessage({
                             type: 'ERROR',
-                            error: error.message
+                            errorType: 'RUNTIME',
+                            error: error.message,
+                            stack: error.stack || 'No stack trace available'
                         });
                     }
                 }
@@ -1450,6 +1486,8 @@ class BotSandbox {
 
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
+                // Timeout - bot didn't respond in time
+                this.onError('TIMEOUT', 'Bot decision timeout - bot took too long to respond', '');
                 resolve({
                     speed: CAR_ACTIONS.IDLE,
                     lane: null,
@@ -1461,7 +1499,21 @@ class BotSandbox {
                 clearTimeout(timeout);
                 if (e.data.type === 'DECISION') {
                     resolve(e.data.actions);
+                } else if (e.data.type === 'ERROR') {
+                    // Handle error from worker
+                    this.onError(e.data.errorType || 'RUNTIME', e.data.error, e.data.stack || '');
+                    resolve({
+                        speed: CAR_ACTIONS.IDLE,
+                        lane: null,
+                        special: []
+                    });
+                } else if (e.data.type === 'CONSOLE') {
+                    // Handle console output from worker
+                    this.onConsoleOutput(e.data.level, e.data.message);
+                    // Don't resolve - wait for actual decision
                 } else {
+                    // Unknown message type
+                    this.onError('UNKNOWN', 'Unknown message type from bot worker: ' + e.data.type, '');
                     resolve({
                         speed: CAR_ACTIONS.IDLE,
                         lane: null,
@@ -1476,6 +1528,17 @@ class BotSandbox {
                 state: JSON.parse(JSON.stringify(state))
             });
         });
+    }
+
+    // Callback methods for UI updates
+    onError(errorType, message, stack) {
+        // Default implementation - can be overridden
+        console.error(`Bot Error [${errorType}]:`, message);
+    }
+
+    onConsoleOutput(level, message) {
+        // Default implementation - can be overridden
+        console.log(`Bot Console [${level}]:`, message);
     }
 
     terminate() {
@@ -1564,6 +1627,23 @@ class RaceEngine {
         this.bot1 = new BotSandbox();
         this.bot2 = new BotSandbox();
 
+        // Set up error and console callbacks for UI updates
+        this.bot1.onError = (errorType, message, stack) => {
+            this.displayBotError('player1', errorType, message, stack);
+        };
+        
+        this.bot1.onConsoleOutput = (level, message) => {
+            this.displayBotConsole('player1', level, message);
+        };
+
+        this.bot2.onError = (errorType, message, stack) => {
+            this.displayBotError('player2', errorType, message, stack);
+        };
+        
+        this.bot2.onConsoleOutput = (level, message) => {
+            this.displayBotConsole('player2', level, message);
+        };
+
         await this.bot1.loadBot(bot1Code);
         await this.bot2.loadBot(bot2Code);
     }
@@ -1594,29 +1674,66 @@ class RaceEngine {
         if (!this.running) return;
 
         if (!this.paused) {
-            // Get bot decisions
-            const state1 = this.createBotState(this.gameState, 'player1');
-            const state2 = this.createBotState(this.gameState, 'player2');
+            try {
+                // Get bot decisions with error handling
+                const state1 = this.createBotState(this.gameState, 'player1');
+                const state2 = this.createBotState(this.gameState, 'player2');
 
-            const action1 = await this.bot1.getDecision(state1);
-            const action2 = await this.bot2.getDecision(state2);
+                let action1, action2;
 
-            // Log actions
-            this.logActions(action1, action2);
+                // Get player 1 decision with error handling
+                try {
+                    action1 = await this.bot1.getDecision(state1);
+                } catch (error) {
+                    console.error('Bot 1 decision error:', error);
+                    this.displayBotError('player1', 'DECISION_ERROR', error.message, error.stack);
+                    action1 = {
+                        speed: CAR_ACTIONS.IDLE,
+                        lane: null,
+                        special: []
+                    };
+                }
 
-            // Store last actions for rendering
-            this.gameState.player1.lastAction = action1.speed;
-            this.gameState.player2.lastAction = action2.speed;
+                // Get player 2 decision with error handling
+                try {
+                    action2 = await this.bot2.getDecision(state2);
+                } catch (error) {
+                    console.error('Bot 2 decision error:', error);
+                    this.displayBotError('player2', 'DECISION_ERROR', error.message, error.stack);
+                    action2 = {
+                        speed: CAR_ACTIONS.IDLE,
+                        lane: null,
+                        special: []
+                    };
+                }
 
-            // Update physics
-            this.gameState = this.physicsEngine.tick(this.gameState, [action1, action2]);
+                // Validate actions
+                action1 = this.validateAction(action1);
+                action2 = this.validateAction(action2);
 
-            // Check win conditions
-            this.checkWinConditions();
+                // Log actions
+                this.logActions(action1, action2);
 
-            // Update tick
-            this.tick++;
-            this.gameState.race.currentTick = this.tick;
+                // Store last actions for rendering
+                this.gameState.player1.lastAction = action1.speed;
+                this.gameState.player2.lastAction = action2.speed;
+
+                // Update physics
+                this.gameState = this.physicsEngine.tick(this.gameState, [action1, action2]);
+
+                // Check win conditions
+                this.checkWinConditions();
+
+                // Update tick
+                this.tick++;
+                this.gameState.race.currentTick = this.tick;
+
+            } catch (error) {
+                console.error('Game loop error:', error);
+                this.displayBotError('system', 'GAME_LOOP_ERROR', 'Critical game loop error: ' + error.message, error.stack);
+                // Don't stop the game, just pause it
+                this.paused = true;
+            }
         }
 
         // Render
@@ -1696,6 +1813,88 @@ class RaceEngine {
         if (this.actionLog.length > 20) {
             this.actionLog.shift();
         }
+    }
+
+    displayBotError(playerId, errorType, message, stack) {
+        // Add error to debug console UI
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            // Remove "no errors" message if present
+            const noErrors = errorDisplay.querySelector('.no-errors');
+            if (noErrors) {
+                noErrors.remove();
+            }
+
+            // Create error entry
+            const errorEntry = document.createElement('div');
+            errorEntry.className = 'error-entry';
+            errorEntry.innerHTML = `
+                <div class="error-type">${errorType} - ${playerId}</div>
+                <div class="error-message">${message}</div>
+                ${stack ? `<details><summary>Stack Trace</summary><pre>${stack}</pre></details>` : ''}
+            `;
+
+            errorDisplay.appendChild(errorEntry);
+
+            // Auto-scroll to bottom
+            errorDisplay.scrollTop = errorDisplay.scrollHeight;
+
+            // Switch to debug tab if not already active
+            const debugTab = document.querySelector('[data-tab="debug"]');
+            if (debugTab && !debugTab.classList.contains('active')) {
+                debugTab.style.backgroundColor = '#e74c3c';
+                debugTab.style.animation = 'pulse 1s ease-in-out 3';
+            }
+        }
+    }
+
+    displayBotConsole(playerId, level, message) {
+        // Add console output to debug console UI
+        const consoleOutput = document.getElementById('console-output');
+        if (consoleOutput) {
+            // Remove "no output" message if present
+            const noOutput = consoleOutput.querySelector('.no-output');
+            if (noOutput) {
+                noOutput.remove();
+            }
+
+            // Create console entry
+            const consoleEntry = document.createElement('div');
+            consoleEntry.className = 'console-entry';
+            consoleEntry.innerHTML = `
+                <span class="log-source">[${playerId}]</span>
+                <span class="log-level ${level}">${level}:</span>
+                <span class="log-message">${message}</span>
+            `;
+
+            consoleOutput.appendChild(consoleEntry);
+
+            // Keep only last 50 entries
+            const entries = consoleOutput.querySelectorAll('.console-entry');
+            if (entries.length > 50) {
+                entries[0].remove();
+            }
+
+            // Auto-scroll to bottom
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+    }
+
+    validateAction(action) {
+        // Ensure action has the required structure
+        if (!action || typeof action !== 'object') {
+            return {
+                speed: CAR_ACTIONS.IDLE,
+                lane: null,
+                special: []
+            };
+        }
+
+        return {
+            speed: action.speed || CAR_ACTIONS.IDLE,
+            lane: action.lane || null,
+            special: Array.isArray(action.special) ? action.special : []
+        };
     }
 
     checkWinConditions() {
@@ -2018,6 +2217,11 @@ class UIController {
         document.getElementById('apply-config').addEventListener('click', () => {
             this.applyConfiguration();
         });
+
+        // Clear debug console button
+        document.getElementById('clear-debug').addEventListener('click', () => {
+            this.clearDebugConsole();
+        });
     }
 
     mapCarAction(car) {
@@ -2081,9 +2285,10 @@ class UIController {
         try {
             const code = await this.readFile(file);
 
-            // Validate bot code
-            if (!code.includes('PlayerBot') || !code.includes('decide')) {
-                throw new Error('Invalid bot file. Must contain PlayerBot class with decide method.');
+            // Enhanced bot code validation
+            const validationResult = this.validateBotCode(code);
+            if (!validationResult.isValid) {
+                throw new Error(`Invalid bot file: ${validationResult.error}`);
             }
 
             // Store code
@@ -2103,8 +2308,236 @@ class UIController {
                 document.getElementById('bot-code-display').textContent = code;
             }
 
+            // Clear any previous errors for this bot
+            this.clearBotErrors(playerId);
+
+            // Show success message in debug console
+            this.displayBotConsole(playerId, 'info', `Bot loaded successfully: ${file.name}`);
+
         } catch (error) {
+            // Show error in both alert and debug console
             alert(`Error loading bot: ${error.message}`);
+            this.displayBotError(playerId, 'LOADING_ERROR', error.message, '');
+        }
+    }
+
+    validateBotCode(code) {
+        // Basic structure validation
+        if (!code.includes('PlayerBot')) {
+            return { isValid: false, error: 'Must contain PlayerBot class declaration' };
+        }
+
+        if (!code.includes('decide')) {
+            return { isValid: false, error: 'PlayerBot class must have a decide method' };
+        }
+
+        // Syntax validation using try-catch with eval
+        try {
+            // Create a safe evaluation context
+            const safeCode = `
+                (function() {
+                    ${code}
+                    
+                    // Validate the class structure
+                    if (typeof PlayerBot !== 'function') {
+                        throw new Error('PlayerBot must be a class or function');
+                    }
+                    
+                    // Try to create an instance
+                    const testInstance = new PlayerBot();
+                    
+                    if (typeof testInstance.decide !== 'function') {
+                        throw new Error('PlayerBot must have a decide method');
+                    }
+                    
+                    // Check decide method signature
+                    const decideStr = testInstance.decide.toString();
+                    const paramCount = testInstance.decide.length;
+                    if (paramCount < 2) {
+                        throw new Error('decide method must accept at least 2 parameters (state, car)');
+                    }
+                    
+                    return true;
+                })()
+            `;
+
+            // Test compilation
+            eval(safeCode);
+
+        } catch (syntaxError) {
+            return { 
+                isValid: false, 
+                error: `Syntax error: ${syntaxError.message}` 
+            };
+        }
+
+        // Additional pattern validation
+        if (!code.match(/class\s+PlayerBot|function\s+PlayerBot/)) {
+            return { isValid: false, error: 'PlayerBot must be declared as a class or function' };
+        }
+
+        if (!code.match(/decide\s*\(/)) {
+            return { isValid: false, error: 'decide method not found or malformed' };
+        }
+
+        // Check for potentially dangerous code (basic security)
+        const dangerousPatterns = [
+            /fetch\s*\(/i,
+            /XMLHttpRequest/i,
+            /localStorage/i,
+            /sessionStorage/i,
+            /document\./i,
+            /window\./i,
+            /eval\s*\(/i,
+            /Function\s*\(/i
+        ];
+
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(code)) {
+                return { 
+                    isValid: false, 
+                    error: 'Bot code contains potentially unsafe operations' 
+                };
+            }
+        }
+
+        return { isValid: true };
+    }
+
+    clearBotErrors(playerId) {
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            // Remove errors for this specific bot
+            const errorEntries = errorDisplay.querySelectorAll('.error-entry');
+            errorEntries.forEach(entry => {
+                const errorTypeElement = entry.querySelector('.error-type');
+                if (errorTypeElement && errorTypeElement.textContent.includes(playerId)) {
+                    entry.remove();
+                }
+            });
+
+            // If no errors remain, show "no errors" message
+            if (errorDisplay.children.length === 0) {
+                const noErrors = document.createElement('div');
+                noErrors.className = 'no-errors';
+                noErrors.textContent = 'No errors reported';
+                errorDisplay.appendChild(noErrors);
+            }
+        }
+    }
+
+    clearDebugConsole() {
+        // Clear errors
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            errorDisplay.innerHTML = '<div class="no-errors">No errors reported</div>';
+        }
+
+        // Clear console output
+        const consoleOutput = document.getElementById('console-output');
+        if (consoleOutput) {
+            consoleOutput.innerHTML = '<div class="no-output">No console output</div>';
+        }
+    }
+
+    displayBotError(playerId, errorType, message, stack) {
+        // Add error to debug console UI
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            // Remove "no errors" message if present
+            const noErrors = errorDisplay.querySelector('.no-errors');
+            if (noErrors) {
+                noErrors.remove();
+            }
+
+            // Create error entry
+            const errorEntry = document.createElement('div');
+            errorEntry.className = 'error-entry';
+            errorEntry.innerHTML = `
+                <div class="error-type">${errorType} - ${playerId}</div>
+                <div class="error-message">${message}</div>
+                ${stack ? `<details><summary>Stack Trace</summary><pre>${stack}</pre></details>` : ''}
+            `;
+
+            errorDisplay.appendChild(errorEntry);
+
+            // Auto-scroll to bottom
+            errorDisplay.scrollTop = errorDisplay.scrollHeight;
+
+            // Switch to debug tab if not already active
+            const debugTab = document.querySelector('[data-tab="debug"]');
+            if (debugTab && !debugTab.classList.contains('active')) {
+                debugTab.style.backgroundColor = '#e74c3c';
+                debugTab.style.animation = 'pulse 1s ease-in-out 3';
+            }
+        }
+    }
+
+    displayBotConsole(playerId, level, message) {
+        // Add console output to debug console UI
+        const consoleOutput = document.getElementById('console-output');
+        if (consoleOutput) {
+            // Remove "no output" message if present
+            const noOutput = consoleOutput.querySelector('.no-output');
+            if (noOutput) {
+                noOutput.remove();
+            }
+
+            // Create console entry
+            const consoleEntry = document.createElement('div');
+            consoleEntry.className = 'console-entry';
+            consoleEntry.innerHTML = `
+                <span class="log-source">[${playerId}]</span>
+                <span class="log-level ${level}">${level}:</span>
+                <span class="log-message">${message}</span>
+            `;
+
+            consoleOutput.appendChild(consoleEntry);
+
+            // Keep only last 50 entries
+            const entries = consoleOutput.querySelectorAll('.console-entry');
+            if (entries.length > 50) {
+                entries[0].remove();
+            }
+
+            // Auto-scroll to bottom
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+    }
+
+    clearBotErrors(playerId) {
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            // Remove errors for this specific bot
+            const errorEntries = errorDisplay.querySelectorAll('.error-entry');
+            errorEntries.forEach(entry => {
+                const errorTypeElement = entry.querySelector('.error-type');
+                if (errorTypeElement && errorTypeElement.textContent.includes(playerId)) {
+                    entry.remove();
+                }
+            });
+
+            // If no errors remain, show "no errors" message
+            if (errorDisplay.children.length === 0) {
+                const noErrors = document.createElement('div');
+                noErrors.className = 'no-errors';
+                noErrors.textContent = 'No errors reported';
+                errorDisplay.appendChild(noErrors);
+            }
+        }
+    }
+
+    clearDebugConsole() {
+        // Clear errors
+        const errorDisplay = document.getElementById('error-display');
+        if (errorDisplay) {
+            errorDisplay.innerHTML = '<div class="no-errors">No errors reported</div>';
+        }
+
+        // Clear console output
+        const consoleOutput = document.getElementById('console-output');
+        if (consoleOutput) {
+            consoleOutput.innerHTML = '<div class="no-output">No console output</div>';
         }
     }
 
@@ -2327,12 +2760,18 @@ class PlayerBot {
         // Update tabs
         document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.tab === tabName);
+            // Remove error notification styling
+            if (tab.dataset.tab === 'debug') {
+                tab.style.backgroundColor = '';
+                tab.style.animation = '';
+            }
         });
 
         // Update content
         document.getElementById('stats-panel').style.display = tabName === 'stats' ? 'block' : 'none';
         document.getElementById('log-panel').style.display = tabName === 'log' ? 'block' : 'none';
         document.getElementById('code-panel').style.display = tabName === 'code' ? 'block' : 'none';
+        document.getElementById('debug-panel').style.display = tabName === 'debug' ? 'block' : 'none';
 
         // Load code if code tab
         if (tabName === 'code' && this.bot1Code) {
@@ -2346,8 +2785,6 @@ class PlayerBot {
         const obstacles = document.getElementById('config-obstacles').value;
         const fuelStations = parseInt(document.getElementById('config-fuel').value);
 
-        console.log(`Applying configuration: ${fuelStations} fuel stations`);
-
         // Update race engine settings
         this.raceEngine.totalLaps = laps;
 
@@ -2356,8 +2793,6 @@ class PlayerBot {
         trackGen.fuelStationCount = fuelStations;
         // Make sure the track generator uses the updated fuel station count
         this.raceEngine.track = trackGen.generate(Math.random(), obstacles);
-
-        console.log(`Generated track with ${this.raceEngine.track.fuelStations.length} fuel stations`);
 
         // Reset the race with new settings
         this.resetRace();
