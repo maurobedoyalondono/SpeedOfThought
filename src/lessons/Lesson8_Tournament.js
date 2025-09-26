@@ -61,7 +61,14 @@ class TournamentBot {
         // CONCEPT 4: Performance Analytics and Learning
         this.trackPerformance(state);
         
-        // CONCEPT 5: Championship Decision Making
+        // CONCEPT 5: Championship Decision Making with Safety Priority
+        // Always check for immediate dangers first in tournament play
+        if (state.hasObstacleAhead()) {
+            console.log("⚠️ TOURNAMENT SAFETY: Obstacle detected - avoiding!");
+            this.executeObstacleAvoidance(state, car);
+            return;
+        }
+
         const action = this.makeChampionshipDecision(state, car);
         
         // Execute with tournament-level precision
@@ -334,11 +341,27 @@ class TournamentBot {
     }
 
     makeAdaptiveDecision(state) {
-        // Master-level adaptive decision making
+        // Master-level adaptive decision making with enhanced track awareness
         const raceProgress = (state.car.lap - 1) / state.track.totalLaps;
         const gap = state.opponent.distance;
         const fuel = state.car.fuel;
-        
+
+        // Tournament-level strategic analysis using helper methods
+        const hasObstacleAhead = state.hasObstacleAhead();
+        const hasFuelStationAhead = state.hasFuelStationAhead();
+        const hasBoostPadAhead = state.hasBoostPadAhead();
+
+        // Immediate tactical opportunities
+        if (hasBoostPadAhead && fuel > 20) {
+            console.log("🚀 TOURNAMENT: Collecting boost pad in our lane!");
+            return CAR_ACTIONS.ACCELERATE;
+        }
+
+        if (hasFuelStationAhead && fuel < 40) {
+            console.log("⛽ TOURNAMENT: Fuel station in our lane - slowing to refuel");
+            return CAR_ACTIONS.BRAKE;
+        }
+
         // Championship-level fuel management
         const fuelNeeded = this.estimateFuelNeeded(state);
         const fuelCushion = fuel - fuelNeeded;
@@ -395,9 +418,20 @@ class TournamentBot {
     }
 
     executeTournamentAction(action, car, state) {
+        // Championship-level safety validation before execution
+        if (action === CAR_ACTIONS.CHANGE_LANE_LEFT || action === CAR_ACTIONS.CHANGE_LANE_RIGHT) {
+            const targetLane = action === CAR_ACTIONS.CHANGE_LANE_LEFT ? state.car.lane - 1 : state.car.lane + 1;
+
+            if (targetLane < 0 || targetLane > 2 || !state.isLaneSafe(targetLane)) {
+                console.log("⚠️ TOURNAMENT SAFETY: Unsafe lane change blocked - maintaining position");
+                car.executeAction(CAR_ACTIONS.ACCELERATE); // Safe fallback
+                return;
+            }
+        }
+
         // Execute action with championship precision
         car.executeAction(action);
-        
+
         // Log championship-level decision reasoning
         const reasoning = this.getDecisionReasoning(action, state);
         console.log(`🏆 CHAMPIONSHIP: ${action} - ${reasoning}`);
@@ -467,6 +501,47 @@ class TournamentBot {
         
         console.log("==========================================\n");
     }
+
+    // Tournament-level obstacle avoidance with strategic lane selection
+    executeObstacleAvoidance(state, car) {
+        const currentLane = state.car.lane;
+
+        // Find safest lane using tournament-level analysis
+        let bestLane = null;
+        let bestScore = -1;
+
+        for (let lane = 0; lane <= 2; lane++) {
+            if (lane !== currentLane && state.isLaneSafe(lane)) {
+                // Calculate lane desirability for tournament play
+                let score = 1; // Base safety score
+
+                // Prefer lanes with strategic advantages
+                if (lane === 1 || lane === 2) {
+                    score += 0.5; // Fuel-accessible lanes
+                }
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestLane = lane;
+                }
+            }
+        }
+
+        if (bestLane !== null) {
+            const action = bestLane < currentLane ? CAR_ACTIONS.CHANGE_LANE_LEFT : CAR_ACTIONS.CHANGE_LANE_RIGHT;
+            car.executeAction(action);
+            console.log(`🏆 TOURNAMENT EVASION: Moving to strategic lane ${bestLane}`);
+        } else {
+            // Emergency measures
+            if (state.car.fuel > 15) {
+                car.executeAction(CAR_ACTIONS.JUMP);
+                console.log("🏆 TOURNAMENT EMERGENCY: Jumping obstacle!");
+            } else {
+                car.executeAction(CAR_ACTIONS.BRAKE);
+                console.log("🏆 TOURNAMENT EMERGENCY: Emergency brake!");
+            }
+        }
+    }
 }
 
 // Strategy implementations for tournament play
@@ -507,13 +582,38 @@ class PsychologicalStrategy {
 
 class TechnicalStrategy {
     decide(state, tournament, analytics) {
-        // Optimal fuel management
+        // Optimal fuel management with enhanced track awareness
         const raceProgress = (state.car.lap - 1) / state.track.totalLaps;
         const fuelNeeded = (1 - raceProgress) * 60;
-        
+
+        // Technical optimization with safety priority
+        if (state.hasObstacleAhead()) {
+            return this.handleTechnicalObstacleAvoidance(state);
+        }
+
+        // Fuel station optimization
+        if (state.hasFuelStationAhead() && state.car.fuel < 60) {
+            return CAR_ACTIONS.BRAKE; // Optimize fuel collection
+        }
+
+        // Boost pad efficiency
+        if (state.hasBoostPadAhead() && state.car.fuel > fuelNeeded + 30) {
+            return CAR_ACTIONS.ACCELERATE; // Collect free speed
+        }
+
         if (state.car.fuel > fuelNeeded + 20) return CAR_ACTIONS.ACCELERATE;
         if (state.car.fuel > fuelNeeded + 10) return CAR_ACTIONS.COAST;
         return CAR_ACTIONS.COAST;
+    }
+
+    handleTechnicalObstacleAvoidance(state) {
+        // Technical approach to obstacle avoidance
+        for (let lane = 0; lane <= 2; lane++) {
+            if (lane !== state.car.lane && state.isLaneSafe(lane)) {
+                return lane < state.car.lane ? CAR_ACTIONS.CHANGE_LANE_LEFT : CAR_ACTIONS.CHANGE_LANE_RIGHT;
+            }
+        }
+        return CAR_ACTIONS.JUMP; // Technical fallback
     }
 }
 
@@ -541,6 +641,13 @@ CHAMPIONSHIP-LEVEL CONCEPTS:
    - Meta evolution tracking
    - Dominant strategy identification
    - Counter-meta preparation
+
+NEW HELPER METHODS FOR CHAMPIONSHIP SAFETY:
+- state.hasObstacleAhead(): Immediate danger detection for tournament play
+- state.isLaneSafe(lane): Safe lane change validation before execution
+- state.hasFuelStationAhead(): Strategic fuel positioning opportunities
+- state.hasBoostPadAhead(): Tactical speed boost collection
+- ALWAYS prioritize safety over strategy in tournament racing!
 
 2. OPPONENT MODELING:
    - Behavior pattern recognition

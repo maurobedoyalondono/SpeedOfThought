@@ -361,6 +361,12 @@ class PlayerBot {
 /*
 LESSON 6: COMPETITIVE PSYCHOLOGY MASTERY
 
+NEW HELPER METHODS FOR SAFE PSYCHOLOGICAL WARFARE:
+- state.hasObstacleAhead(): Check safety before aggressive moves
+- state.isLaneSafe(lane): Verify lane change safety during maneuvers
+- state.hasFuelStationAhead(): Control fuel access strategically
+- Always prioritize safety over psychological tactics!
+
 CORE PSYCHOLOGICAL CONCEPTS:
 
 1. OPPONENT PROFILING:
@@ -513,6 +519,9 @@ Use these concepts to:
 - Understand competitive psychology
 - Develop better game AI
 - Learn about human behavior patterns
+
+SAFETY FIRST: Always use helper methods for safety checks!
+Psychological warfare means nothing if you crash during execution.
 
 THE ULTIMATE PSYCHOLOGICAL VICTORY:
 Make your opponent beat themselves.

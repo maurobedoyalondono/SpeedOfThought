@@ -147,8 +147,11 @@ class PlayerBot {
             }
         }
 
-        // Don't forget obstacles! (from Lesson 3)
-        this.avoidObstacles(state, car);
+        // Always handle obstacles first - safety priority!
+        if (state.hasObstacleAhead()) {
+            this.avoidObstacles(state, car);
+            return; // Skip other actions when avoiding obstacles
+        }
 
         // Display current race mode
         if (state.car.position % 100 < 1) {
@@ -157,14 +160,23 @@ class PlayerBot {
     }
 
     avoidObstacles(state, car) {
-        if (state.track.ahead[0].obstacles && state.track.ahead[0].obstacles.length > 0) {
-            const obstacle = state.track.ahead[0].obstacles[0];
-            if (obstacle.lane === state.car.lane) {
-                // Quick avoidance
-                if (state.car.lane > 0) {
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+        // Use new helper method to check for obstacles in our lane
+        if (state.hasObstacleAhead()) {
+            // Find a safe lane to move to
+            if (state.car.lane > 0 && state.isLaneSafe(state.car.lane - 1)) {
+                car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                console.log("Avoiding obstacle by moving left to lane", state.car.lane - 1);
+            } else if (state.car.lane < 2 && state.isLaneSafe(state.car.lane + 1)) {
+                car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                console.log("Avoiding obstacle by moving right to lane", state.car.lane + 1);
+            } else {
+                // No safe lane available, try jumping if we have fuel
+                if (state.car.fuel > 10) {
+                    car.executeAction(CAR_ACTIONS.JUMP);
+                    console.log("No safe lane - jumping over obstacle!");
                 } else {
-                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                    car.executeAction(CAR_ACTIONS.BRAKE);
+                    console.log("No safe options - emergency braking!");
                 }
             }
         }
@@ -181,6 +193,12 @@ OPPONENT INFORMATION:
 - state.opponent.speed: Their current speed
 - state.opponent.lane: Which lane they're in
 - state.opponent.lap: What lap they're on
+
+NEW HELPER METHODS FOR SAFETY:
+- state.hasObstacleAhead(): Check if obstacle in your lane
+- state.isLaneSafe(lane): Check if lane change is safe
+- state.getObstaclesAhead(): Get all obstacles ahead
+- Use these methods to avoid crashes while racing!
 
 RACING TACTICS:
 
@@ -206,6 +224,8 @@ RACING TACTICS:
    - Inside lane might be shorter
    - Outside lane might have fewer obstacles
    - Middle lane gives most options
+   - Use state.isLaneSafe() to check before changing lanes
+   - Always prioritize obstacle avoidance over racing position
 
 NEW ACTIONS:
 - CAR_ACTIONS.BOOST: Maximum power sprint (uses boost + fuel)

@@ -49,9 +49,9 @@
 
         .status-badge {
             background: rgba(0,0,0,0.3);
-            padding: 5px 15px;
+            padding: 4px 12px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
         }
 
@@ -64,13 +64,13 @@
 
         /* Left Panel - Bot Loading */
         #left-panel {
-            width: 300px;
+            width: 250px;
             background: rgba(44, 62, 80, 0.95);
             border-right: 2px solid #34495e;
             display: flex;
             flex-direction: column;
-            padding: 20px;
-            gap: 20px;
+            padding: 15px;
+            gap: 15px;
             overflow-y: auto;
         }
 
@@ -78,7 +78,7 @@
             background: rgba(255,255,255,0.08);
             border: 2px dashed #7f8c8d;
             border-radius: 10px;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
             transition: all 0.3s ease;
             cursor: pointer;
@@ -102,13 +102,13 @@
         }
 
         .bot-name {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             margin-bottom: 5px;
         }
 
         .bot-file {
-            font-size: 12px;
+            font-size: 11px;
             color: #aaa;
         }
 
@@ -207,7 +207,7 @@
 
         /* Right Panel - Stats & Info */
         #right-panel {
-            width: 350px;
+            width: 280px;
             background: rgba(44, 62, 80, 0.95);
             border-left: 2px solid #34495e;
             display: flex;
@@ -223,12 +223,13 @@
 
         .tab {
             flex: 1;
-            padding: 10px;
+            padding: 8px;
             text-align: center;
             cursor: pointer;
             background: transparent;
             border: none;
             color: #aaa;
+            font-size: 11px;
             font-weight: 600;
             transition: all 0.3s ease;
         }
@@ -245,7 +246,7 @@
 
         .panel-content {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             overflow-y: auto;
         }
 
@@ -255,7 +256,7 @@
         }
 
         .stat-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #888;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -263,7 +264,7 @@
         }
 
         .stat-value {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             display: flex;
             align-items: baseline;
@@ -271,7 +272,7 @@
         }
 
         .stat-unit {
-            font-size: 14px;
+            font-size: 12px;
             color: #aaa;
         }
 
@@ -752,8 +753,30 @@
 
         /* Responsive */
         @media (max-width: 1200px) {
-            #left-panel { width: 250px; }
-            #right-panel { width: 300px; }
+            #left-panel { width: 200px; }
+            #right-panel { width: 240px; }
+        }
+
+        @media (max-width: 992px) {
+            #left-panel { width: 180px; padding: 10px; }
+            #right-panel { width: 220px; }
+            .bot-loader { padding: 10px; }
+            .bot-name { font-size: 13px; }
+            .bot-file { font-size: 10px; }
+            .stat-label { font-size: 10px; }
+            .stat-value { font-size: 18px; }
+            .stat-unit { font-size: 11px; }
+            .tab { font-size: 10px; padding: 6px; }
+            .panel-content { padding: 12px; }
+        }
+
+        @media (max-width: 768px) {
+            #left-panel { width: 160px; padding: 8px; }
+            #right-panel { width: 200px; }
+            #header h1 { font-size: 20px; }
+            .status-badge { font-size: 11px; padding: 3px 10px; }
+            .control-btn { font-size: 12px; padding: 8px 16px; }
+            .control-btn.start { font-size: 14px; padding: 8px 24px; }
         }
     </style>
 </head>
@@ -867,7 +890,7 @@
             </div>
 
             <div class="panel-content" id="stats-panel">
-                <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 16px;">� RACE LEADERBOARD</h3>
+                <h3 style="margin-bottom: 12px; color: #e74c3c; font-size: 14px;">� RACE LEADERBOARD</h3>
                 
                 <!-- F1 Style Leaderboard -->
                 <div class="f1-leaderboard">
@@ -968,7 +991,7 @@
             </div>
 
             <div class="panel-content" id="debug-panel" style="display: none;">
-                <h3 style="margin-bottom: 15px; color: #e74c3c; font-size: 16px;">🐛 DEBUG CONSOLE</h3>
+                <h3 style="margin-bottom: 12px; color: #e74c3c; font-size: 14px;">🐛 DEBUG CONSOLE</h3>
                 
                 <div class="debug-section">
                     <h4>Bot Errors</h4>

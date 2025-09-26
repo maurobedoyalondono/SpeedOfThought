@@ -34,24 +34,23 @@ class PlayerBot {
             car.executeAction(CAR_ACTIONS.COAST);
         }
 
-        // TIP: Look for fuel zones on the track!
+        // TIP: Look for fuel zones on the track using new helper methods!
         // Fuel zones are GREEN and only exist in lanes 1 and 2 (middle and right)
-        for (let i = 0; i < state.track.ahead.length; i++) {
-            if (state.track.ahead[i].type === 'fuel_zone') {
-                console.log("Fuel zone ahead at segment", i, "- Remember: fuel zones are in lanes 1-2 only!");
-                
-                // Are we in the right lane for refueling?
-                if (state.car.lane === 0) {
-                    console.log("I'm in lane 0 - need to change lanes to reach fuel zone!");
-                }
-                break;
+        const fuelStations = state.getFuelStationsAhead();
+        if (fuelStations.length > 0) {
+            const nearestFuel = fuelStations[0]; // Already sorted by distance
+            console.log("Fuel station ahead in lane", nearestFuel.lane, "at distance", nearestFuel.distance);
+
+            // Are we in the right lane for refueling?
+            if (state.car.lane === 0 && state.car.fuel < 60) {
+                console.log("I'm in lane 0 - need to change lanes to reach fuel zone!");
             }
         }
 
-        // ADVANCED TIP: Check if we're currently IN a fuel zone
-        if (state.track.ahead[0] && state.track.ahead[0].type === 'fuel_zone') {
-            console.log("I'm in a fuel zone! Refueling at 72L/second");
-            // Slow down to stay in the fuel zone longer!
+        // ADVANCED TIP: Check if we have a fuel station right ahead in our lane
+        if (state.hasFuelStationAhead()) {
+            console.log("Fuel station in my lane! Will refuel at 72L/second");
+            // Slow down to stay in the fuel zone longer if we need fuel!
             if (state.car.fuel < 80) {
                 car.executeAction(CAR_ACTIONS.BRAKE); // Stay longer to refuel more
                 console.log("Braking to maximize refuel time");
@@ -66,15 +65,18 @@ class PlayerBot {
         // }
 
         // CHALLENGE 2: Sprint when you have extra fuel
-        // if (state.car.fuel > 80) {
+        // if (state.car.fuel > 80 && !state.hasObstacleAhead()) {
         //     car.executeAction(CAR_ACTIONS.SPRINT); // Go very fast!
         // }
 
         // CHALLENGE 3: Smart lane changing for fuel zones
-        // if (state.car.fuel < 60 && state.car.lane === 0) {
+        // const fuelStations = state.getFuelStationsAhead();
+        // if (state.car.fuel < 60 && state.car.lane === 0 && fuelStations.length > 0) {
         //     console.log("Low fuel and in lane 0 - changing to lane 1 for fuel access");
-        //     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-        //     return; // Lane changes take priority
+        //     if (state.isLaneSafe(1)) {
+        //         car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+        //         return; // Lane changes take priority
+        //     }
         // }
 
         // CHALLENGE 4: Calculate fuel efficiency
@@ -83,12 +85,13 @@ class PlayerBot {
         //     console.log("Rough fuel efficiency check - Fuel left:", state.car.fuel);
         // }
 
-        // CHALLENGE 5: Emergency fuel management
+        // CHALLENGE 5: Emergency fuel management with smart look-ahead
         // const lapsRemaining = state.track.totalLaps - state.car.lap + 1;
         // const estimatedFuelPerLap = 35; // This is a guess - you need to measure!
         // const fuelNeeded = lapsRemaining * estimatedFuelPerLap;
-        // if (fuelNeeded > state.car.fuel) {
-        //     console.log("WARNING: May not have enough fuel to finish!");
+        // const fuelStations = state.getFuelStationsAhead();
+        // if (fuelNeeded > state.car.fuel && fuelStations.length === 0) {
+        //     console.log("WARNING: May not have enough fuel and no stations visible!");
         //     car.executeAction(CAR_ACTIONS.COAST); // Emergency conservation
         // }
     }
@@ -109,12 +112,18 @@ FUEL ZONES:
 - Only available in lanes 1 and 2 (middle and right)
 - Drive slowly through them to maximize refuel time
 
+NEW HELPER METHODS FOR FUEL MANAGEMENT:
+- state.getFuelStationsAhead() - Returns array of all visible fuel stations
+- state.hasFuelStationAhead() - True if fuel station in your current lane
+- state.isLaneSafe(lane) - Check if you can safely change to a lane
+
 STRATEGY TIPS:
 1. You don't always need maximum speed
 2. Coasting maintains your speed while saving fuel
-3. Look ahead for fuel zones
-4. Calculate if you have enough fuel to finish
-5. Sometimes slowing down helps you go further
+3. Look ahead for fuel zones with getFuelStationsAhead()
+4. Use hasFuelStationAhead() to know when you're approaching fuel
+5. Calculate if you have enough fuel to finish
+6. Sometimes slowing down helps you go further
 
 ADVANCED CHALLENGE:
 Can you complete 3 laps using less than 150 total fuel?

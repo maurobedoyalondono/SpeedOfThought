@@ -82,8 +82,9 @@ class LearningBot {
             isDrafting: state.car.isDrafting ? 1 : 0,
             boostsAvailable: state.car.boosts / 3,
             lanePosition: state.car.lane / 2, // 0, 0.5, or 1
-            obstacleAhead: this.hasObstacleAhead(state) ? 1 : 0,
-            fuelStationAhead: this.hasFuelStationAhead(state) ? 1 : 0
+            obstacleAhead: state.hasObstacleAhead() ? 1 : 0,
+            fuelStationAhead: state.hasFuelStationAhead() ? 1 : 0,
+            boostPadAhead: state.hasBoostPadAhead() ? 1 : 0
         };
 
         // Calculate derived features
@@ -99,31 +100,39 @@ class LearningBot {
         return Math.max(-1, Math.min(1, distance / 200));
     }
 
-    hasObstacleAhead(state) {
-        // Check for obstacles in the next 100 units
-        const lookahead = 100;
-        const myLane = state.car.lane;
-        
-        for (let obstacle of state.track.obstacles) {
-            const relativeDistance = obstacle.position - state.car.position;
-            if (relativeDistance > 0 && relativeDistance < lookahead && obstacle.lane === myLane) {
-                return true;
-            }
-        }
-        return false;
+    getObstacleFeatures(state) {
+        // Get comprehensive obstacle information using new helper methods
+        const obstaclesAhead = state.getObstaclesAhead();
+        const immediateObstacle = state.hasObstacleAhead();
+
+        // Calculate obstacle density and proximity features for learning
+        const nearObstacles = obstaclesAhead.filter(obs => obs.distance <= 100);
+        const obstacleCount = nearObstacles.length;
+        const minDistance = nearObstacles.length > 0 ? Math.min(...nearObstacles.map(obs => obs.distance)) : 100;
+
+        return {
+            hasImmediate: immediateObstacle,
+            count: obstacleCount,
+            minDistance: minDistance / 100 // Normalized for ML
+        };
     }
 
-    hasFuelStationAhead(state) {
-        // Check for fuel stations in the next 150 units
-        const lookahead = 150;
-        
-        for (let station of state.track.fuelStations) {
-            const relativeDistance = station.position - state.car.position;
-            if (relativeDistance > 0 && relativeDistance < lookahead) {
-                return true;
-            }
-        }
-        return false;
+    getFuelFeatures(state) {
+        // Get comprehensive fuel information using new helper methods
+        const fuelStationsAhead = state.getFuelStationsAhead();
+        const immediateFuel = state.hasFuelStationAhead();
+
+        // Calculate fuel accessibility features for learning
+        const nearFuelStations = fuelStationsAhead.filter(station => station.distance <= 150);
+        const fuelCount = nearFuelStations.length;
+        const minFuelDistance = nearFuelStations.length > 0 ? Math.min(...nearFuelStations.map(station => station.distance)) : 150;
+
+        return {
+            hasImmediate: immediateFuel,
+            count: fuelCount,
+            minDistance: minFuelDistance / 150, // Normalized for ML
+            accessible: state.car.lane === 1 || state.car.lane === 2
+        };
     }
 
     calculateFuelEfficiency() {
@@ -192,12 +201,12 @@ class LearningBot {
         actionScores.set(CAR_ACTIONS.ACCELERATE, this.evaluateAccelerate(features));
         actionScores.set(CAR_ACTIONS.SPRINT, this.evaluateSprint(features));
         
-        // Lane changes
+        // Lane changes with safety validation
         if (state.car.lane > 0) {
-            actionScores.set(CAR_ACTIONS.CHANGE_LANE_LEFT, this.evaluateLaneChange(features, -1));
+            actionScores.set(CAR_ACTIONS.CHANGE_LANE_LEFT, this.evaluateLaneChange(features, -1, state));
         }
         if (state.car.lane < 2) {
-            actionScores.set(CAR_ACTIONS.CHANGE_LANE_RIGHT, this.evaluateLaneChange(features, 1));
+            actionScores.set(CAR_ACTIONS.CHANGE_LANE_RIGHT, this.evaluateLaneChange(features, 1, state));
         }
         
         // Boost
@@ -303,25 +312,39 @@ class LearningBot {
         return score;
     }
 
-    evaluateLaneChange(features, direction) {
-        // Score lane changes
+    evaluateLaneChange(features, direction, state) {
+        // Score lane changes with safety validation using helper methods
         let score = 0.1; // Small base score
-        
-        // Good to avoid obstacles
+
+        // Calculate target lane for safety check
+        const currentLane = state.car.lane;
+        const targetLane = direction < 0 ? currentLane - 1 : currentLane + 1;
+
+        // Mandatory safety check using helper method
+        if (targetLane < 0 || targetLane > 2 || !state.isLaneSafe(targetLane)) {
+            return -1.0; // Heavy penalty for unsafe/invalid moves
+        }
+
+        // Enhanced obstacle avoidance scoring
         if (features.obstacleAhead) {
             score += 0.8;
         }
-        
-        // Good to reach fuel stations
+
+        // Enhanced fuel station evaluation
         if (features.fuelStationAhead && features.fuelLevel < 0.4) {
             score += 0.6;
         }
-        
-        // Good for overtaking
+
+        // Boost pad consideration
+        if (features.boostPadAhead) {
+            score += 0.3;
+        }
+
+        // Overtaking opportunity
         if (features.positionAdvantage === 0 && Math.abs(features.opponentDistance) < 0.2) {
             score += 0.4;
         }
-        
+
         return score;
     }
 
@@ -509,10 +532,11 @@ LESSON 7: MACHINE LEARNING AND ADAPTIVE AI MASTERY
 
 CORE ML CONCEPTS FOR RACING AI:
 
-1. STATE REPRESENTATION:
-   - Feature extraction from game state
-   - Normalization of values (0-1 range)
-   - Derived features (fuel efficiency, position advantage)
+1. STATE REPRESENTATION USING NEW HELPER METHODS:
+   - Feature extraction using state.getObstaclesAhead(), state.getFuelStationsAhead(), etc.
+   - Safety-aware features using state.isLaneSafe() and state.hasObstacleAhead()
+   - Normalization of values (0-1 range) for ML algorithms
+   - Enhanced derived features (fuel efficiency, position advantage, safety scores)
    - State discretization for pattern recognition
 
 2. ACTION SELECTION:
@@ -567,11 +591,13 @@ MACHINE LEARNING TECHNIQUES:
 
 ADVANCED AI TECHNIQUES:
 
-1. FEATURE ENGINEERING:
-   - Domain-specific features (fuel, speed, position)
+1. FEATURE ENGINEERING WITH HELPER METHODS:
+   - Domain-specific features enhanced by helper methods
+   - Safety features using state.isLaneSafe() for all lane changes
+   - Track awareness using getObstaclesAhead(), getFuelStationsAhead(), getBoostPadsAhead()
    - Temporal features (race progress, trends)
    - Relational features (opponent comparisons)
-   - Derived metrics (efficiency, advantage)
+   - ML-optimized derived metrics (efficiency, advantage, safety scores)
 
 2. ACTION EVALUATION:
    - Multi-criteria decision making

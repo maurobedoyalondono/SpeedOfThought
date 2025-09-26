@@ -15,180 +15,216 @@ class PlayerBot {
 
         // CONCEPT: The track has 3 lanes (0, 1, 2)
         // Lane 0 = Left lane
-        // Lane 1 = Middle lane  
+        // Lane 1 = Middle lane
         // Lane 2 = Right lane
         // IMPORTANT: Fuel zones only exist in lanes 1 and 2!
-        console.log("Current lane:", state.car.lane, "- Remember: fuel zones are in lanes 1-2 only");
+        console.log("Current lane:", state.car.lane, "- Speed:", state.car.speed);
 
         // STEP 1: Check for obstacles using NEW helper methods!
-        
-        // Get ALL obstacles on the track ahead
         const obstacles = state.getObstaclesAhead();
-        console.log("I can see", obstacles.length, "obstacles ahead:", obstacles);
-        
-        // Check if there's an obstacle in my current lane
-        if (state.hasObstacleAhead()) {
-            console.log("DANGER! Obstacle in my lane - need to dodge!");
-            
-            // Find obstacles in my lane
-            const myObstacles = obstacles.filter(obs => obs.lane === state.car.lane && obs.distance < 30);
-            
-            if (myObstacles.length > 0) {
-                const nearestObstacle = myObstacles[0];
-                console.log(`Nearest obstacle in lane ${nearestObstacle.lane} at ${nearestObstacle.distance}m`);
+        const fuelStations = state.getFuelStationsAhead();
+        const boostPads = state.getBoostPadsAhead();
 
-                // Option 1: Jump over it (if we have fuel)
-                if (state.car.fuel > 15 && this.jumpCooldown === 0) {
-                    console.log("Jumping over obstacle!");
+        // STEP 2: React to obstacles in our lane
+        if (state.hasObstacleAhead()) {
+            console.log("⚠️ DANGER! Obstacle in my lane!");
+
+            // Find the nearest obstacle in our lane
+            const obstacleInMyLane = obstacles.find(o => o.lane === state.car.lane);
+            if (obstacleInMyLane) {
+                console.log(`Obstacle at ${obstacleInMyLane.distance}m - need to act!`);
+
+                // Option 1: Jump if close and have fuel
+                if (obstacleInMyLane.distance < 30 && state.car.fuel > 15 && this.jumpCooldown === 0) {
+                    console.log("🦘 Jumping over obstacle!");
                     car.executeAction(CAR_ACTIONS.JUMP);
-                    this.jumpCooldown = 20; // Wait before next jump
+                    this.jumpCooldown = 60; // 1 second cooldown
                     return;
                 }
-                
-                // Option 2: Change lanes strategically
-                let bestLane = -1;
-                let bestScore = -1;
-                
-                for (let lane = 0; lane <= 2; lane++) {
-                    if (lane === state.car.lane) continue;
-                    if (!state.isLaneSafe(lane)) continue;
-                    
-                    // Score lanes based on obstacles and fuel stations
-                    const laneObstacles = obstacles.filter(obs => obs.lane === lane && obs.distance < 50);
-                    const fuelStations = state.getFuelStationsAhead();
-                    const laneFuel = fuelStations.filter(f => f.lane === lane && f.distance < 100);
-                    
-                    let score = 100 - (laneObstacles.length * 20);
-                    if (state.car.fuel < 60) {
-                        score += (laneFuel.length * 15); // Bonus for fuel access when low
+
+                // Option 2: Change lanes if we have time
+                if (obstacleInMyLane.distance > 20) {
+                    // Find the best lane to move to
+                    let bestLane = -1;
+                    let bestScore = -999;
+
+                    // Check each lane
+                    for (let lane = 0; lane <= 2; lane++) {
+                        if (lane === state.car.lane) continue; // Skip current lane
+
+                        // Check if lane is safe using the helper method
+                        if (state.isLaneSafe(lane)) {
+                            let score = 0;
+
+                            // Prefer lanes with fuel stations if we need fuel
+                            if (state.car.fuel < 50) {
+                                const hasFuel = fuelStations.some(f => f.lane === lane && f.distance < 100);
+                                if (hasFuel) score += 50;
+                            }
+
+                            // Prefer lanes with boost pads
+                            const hasBoost = boostPads.some(b => b.lane === lane && b.distance < 100);
+                            if (hasBoost) score += 30;
+
+                            // Prefer middle lane slightly (more options)
+                            if (lane === 1) score += 10;
+
+                            // Count obstacles in this lane
+                            const obstaclesInLane = obstacles.filter(o => o.lane === lane && o.distance < 200).length;
+                            score -= obstaclesInLane * 20;
+
+                            console.log(`Lane ${lane} score: ${score} (safe: yes, obstacles: ${obstaclesInLane})`);
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestLane = lane;
+                            }
+                        } else {
+                            console.log(`Lane ${lane} is NOT safe!`);
+                        }
                     }
-                    
-                    console.log(`Lane ${lane} score: ${score} (obstacles: ${laneObstacles.length}, fuel: ${laneFuel.length})`);
-                    
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestLane = lane;
-                    }
-                }
-                
-                if (bestLane !== -1) {
-                    console.log(`Strategic dodge to lane ${bestLane}!`);
-                    if (bestLane < state.car.lane) {
-                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+
+                    // Change to the best lane if found
+                    if (bestLane >= 0) {
+                        if (bestLane < state.car.lane) {
+                            console.log(`Changing to lane ${bestLane} (LEFT)`);
+                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                        } else {
+                            console.log(`Changing to lane ${bestLane} (RIGHT)`);
+                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                        }
+                        return;
                     } else {
-                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                        // No safe lane - must brake or jump!
+                        console.log("No safe lane! Emergency braking!");
+                        car.executeAction(CAR_ACTIONS.BRAKE);
+                        return;
                     }
-                    return;
-                } else {
-                    console.log("No safe lanes - emergency brake!");
+                }
+
+                // Too close and can't jump - emergency brake!
+                if (obstacleInMyLane.distance < 20) {
+                    console.log("TOO CLOSE! Emergency brake!");
                     car.executeAction(CAR_ACTIONS.BRAKE);
                     return;
                 }
             }
         }
+
+        // STEP 3: Look for opportunities (fuel, boosts)
+        // Check if we need fuel and can get to a station
+        if (state.car.fuel < 50 && fuelStations.length > 0) {
+            const nearestFuel = fuelStations[0];
+            if (nearestFuel.lane !== state.car.lane && state.isLaneSafe(nearestFuel.lane)) {
+                console.log(`Low fuel - moving to lane ${nearestFuel.lane} for fuel station`);
+                if (nearestFuel.lane < state.car.lane) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                } else {
                     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-                    console.log("Moving right to lane", targetLane);
                 }
-
-                return; // Don't do anything else this tick
-
-                // OPTION 2: Jump over it!
-                // Jumping costs 5L fuel but works from any lane
-                // if (this.jumpCooldown === 0 && state.car.fuel > 20) {
-                //     car.executeAction(CAR_ACTIONS.JUMP);
-                //     this.jumpCooldown = 15; // Can't jump again for 15 ticks
-                //     console.log("JUMPING over obstacle! Costs 5L fuel");
-                //     return; // Don't do anything else this tick
-                // }
+                return;
             }
         }
 
-        // STEP 2: Look ahead for better positioning
-        // Check the next few segments for obstacles
-        for (let i = 1; i < Math.min(3, state.track.ahead.length); i++) {
-            if (state.track.ahead[i].obstacles && state.track.ahead[i].obstacles.length > 0) {
-                const futureObstacle = state.track.ahead[i].obstacles[0];
-
-                // If there's an obstacle coming up in our lane
-                if (futureObstacle.lane === state.car.lane) {
-                    console.log("Obstacle coming in", i * 10, "meters");
-
-                    // Start moving away early
-                    if (i === 1) { // Close enough to start moving
-                        if (state.car.lane === 1) {
-                            // Middle lane - check which side is clearer
-                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                        } else if (state.car.lane === 0) {
-                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-                        } else {
-                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                        }
-                    }
-                    break;
+        // Check for boost pads we can collect
+        if (boostPads.length > 0 && state.car.fuel > 30) {
+            const nearestBoost = boostPads[0];
+            if (nearestBoost.distance < 50 && nearestBoost.lane !== state.car.lane && state.isLaneSafe(nearestBoost.lane)) {
+                console.log(`Boost pad nearby - moving to lane ${nearestBoost.lane}`);
+                if (nearestBoost.lane < state.car.lane) {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                } else {
+                    car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                 }
+                return;
             }
         }
 
-        // STEP 3: Normal racing (with fuel management from Lesson 2)
-        if (state.car.fuel > 60) {
+        // STEP 4: Normal driving based on conditions
+        if (state.hasFuelStationAhead() && state.car.fuel < 80) {
+            // Slow down in fuel zone to refuel more
+            car.executeAction(CAR_ACTIONS.BRAKE);
+        } else if (state.car.fuel > 50 && !state.hasObstacleAhead()) {
             car.executeAction(CAR_ACTIONS.ACCELERATE);
-        } else if (state.car.fuel > 30) {
+        } else if (state.car.fuel > 20) {
             car.executeAction(CAR_ACTIONS.COAST);
         } else {
-            car.executeAction(CAR_ACTIONS.COAST);
+            car.executeAction(CAR_ACTIONS.COAST); // Emergency fuel saving
         }
 
-        // CHALLENGE: Try to stay in the middle lane when possible
-        // The middle lane gives you more options!
-        // if (no obstacles nearby && state.car.lane !== 1) {
-        //     if (state.car.lane === 0) {
-        //         car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-        //     } else {
-        //         car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-        //     }
-        // }
+        // CHALLENGE 1: Perfect lane selection
+        // Can you always pick the optimal lane considering obstacles, fuel, and boosts?
+
+        // CHALLENGE 2: Jump mastery
+        // Try to complete a lap using only jumps, no lane changes!
+
+        // CHALLENGE 3: Fuel lane management
+        // Remember fuel is only in lanes 1-2. Can you balance safety and fuel access?
+
+        // CHALLENGE 4: Speed maintenance
+        // Navigate obstacles while maintaining >200 km/h average speed!
     }
 }
 
 /*
-LESSON 3 CONCEPTS:
-
-LANES:
-- Track has 3 lanes: 0 (left), 1 (middle), 2 (right)
-- You can change lanes to avoid obstacles
-- Lane changes take about 5 ticks to complete
+LESSON 3: OBSTACLE NAVIGATION
 
 OBSTACLES:
-- Orange cones that cause 70% speed reduction + 5L fuel damage + 0.5 second stun
-- Each obstacle is in a specific lane (0, 1, or 2)
-- You get a 5-tick cooldown between collisions
+- Red blocks that slow you down if hit
+- Cause collision: -50 km/h, -5L fuel, 0.5s stun
+- Can be avoided by changing lanes or jumping
 
-AVOIDANCE STRATEGIES:
-1. Change lanes (smooth, takes 5 ticks to complete)
-2. Jump over (costs 5L fuel, works from any lane, lasts 10 ticks)
+LANE SYSTEM:
+- 3 lanes: 0 (left), 1 (middle), 2 (right)
+- Fuel zones: ONLY in lanes 1 and 2
+- Each lane can have different obstacles
 
-NEW ACTIONS:
-- CAR_ACTIONS.CHANGE_LANE_LEFT - Move one lane left (takes 5 ticks)
-- CAR_ACTIONS.CHANGE_LANE_RIGHT - Move one lane right (takes 5 ticks)  
-- CAR_ACTIONS.JUMP - Jump over obstacles (costs 5L fuel, lasts 10 ticks)
+NEW HELPER METHODS FOR NAVIGATION:
+- state.getObstaclesAhead() - See all obstacles
+- state.hasObstacleAhead() - Check your current lane
+- state.isLaneSafe(lane) - Check if you can change lanes safely
+- state.getFuelStationsAhead() - Plan fuel stops
+- state.getBoostPadsAhead() - Find speed boosts
 
-STRATEGIC CONSIDERATIONS:
-- Lane changes are free but take time
-- Jumping costs fuel but is instant
-- Consider fuel zone access when choosing lanes (lanes 1-2 only)
-- Middle lane gives you escape options in both directions
+LANE CHANGE ACTIONS:
+- CAR_ACTIONS.CHANGE_LANE_LEFT - Move left (0.2s)
+- CAR_ACTIONS.CHANGE_LANE_RIGHT - Move right (0.2s)
+- Cannot change lanes if another car is there!
 
-ADVANCED CHALLENGE:
-Complete a lap without jumping (only lane changes)
+JUMPING:
+- CAR_ACTIONS.JUMP - Jump over obstacles
+- Costs 10L fuel
+- 1 second cooldown
+- Maintains your speed
 
-DEBUGGING HELP:
-- state.car.lane tells you current lane (0, 1, or 2)
-- state.car.isJumping tells if you're in the air
-- state.track.ahead[i].obstacles lists obstacles ahead
-- Each obstacle has a .lane property
+COLLISION CONSEQUENCES:
+- Speed: -50 km/h instantly
+- Fuel: -5L lost
+- Stun: 0.5 seconds (30 ticks)
+- Position: Lose distance
 
-STRATEGIC THINKING:
-- Is it better to jump (costs fuel) or change lanes (costs time)?
-- Should you stay in one lane or move around?
-- How far ahead should you look?
+STRATEGIC DECISIONS:
+1. Jump: Fast but costs fuel (10L)
+2. Lane change: Free but takes time (0.2s)
+3. Brake: Avoid collision but lose speed
+
+LANE SELECTION STRATEGY:
+- Middle lane (1): Most flexibility, has fuel
+- Side lanes (0,2): Fewer options but sometimes clearer
+- Lane 0: No fuel access - avoid when low on fuel!
+
+ADVANCED TIPS:
+1. Look ahead and plan lane changes early
+2. Combine obstacle avoidance with fuel/boost collection
+3. Jump only when lane change isn't possible
+4. Use isLaneSafe() before every lane change
+5. Remember: No fuel in lane 0!
+
+PROFESSIONAL TECHNIQUE:
+- Scan all 3 lanes constantly
+- Plan 2-3 moves ahead
+- Optimize path for obstacles + resources
+- Maintain high speed through smart routing
+
+Remember: The best drivers avoid obstacles while collecting resources!
 */

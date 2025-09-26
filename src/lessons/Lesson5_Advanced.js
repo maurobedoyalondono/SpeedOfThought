@@ -93,8 +93,11 @@ class PlayerBot {
                 this.balancedStrategy(state, car);
         }
 
-        // Always handle obstacles
+        // PRIORITY: Always handle obstacles first
         this.handleObstacles(state, car);
+        if (state.hasObstacleAhead()) {
+            return; // Skip other strategies when avoiding obstacles
+        }
 
         // ADVANCED CONCEPT 5: Boost pad hunting
         this.seekBoostPads(state, car);
@@ -259,71 +262,109 @@ class PlayerBot {
     }
 
     handleObstacles(state, car) {
-        for (let i = 0; i < Math.min(2, state.track.ahead.length); i++) {
-            if (state.track.ahead[i].obstacles && state.track.ahead[i].obstacles.length > 0) {
-                const obstacle = state.track.ahead[i].obstacles[0];
-                if (obstacle.lane === state.car.lane) {
-                    if (i === 0) {
-                        // Immediate danger!
-                        if (state.car.lane !== 1) {
-                            car.executeAction(state.car.lane === 0 ?
-                                CAR_ACTIONS.CHANGE_LANE_RIGHT :
-                                CAR_ACTIONS.CHANGE_LANE_LEFT);
-                        } else {
-                            // Middle lane - choose based on opponent
-                            car.executeAction(state.opponent.lane <= 1 ?
-                                CAR_ACTIONS.CHANGE_LANE_RIGHT :
-                                CAR_ACTIONS.CHANGE_LANE_LEFT);
-                        }
-                    }
-                    break;
+        // Use new helper method for immediate obstacle detection
+        if (state.hasObstacleAhead()) {
+            console.log("⚠️ IMMEDIATE OBSTACLE DETECTED - Taking evasive action!");
+
+            // Find the safest lane to move to
+            const currentLane = state.car.lane;
+            let bestLane = null;
+
+            // Check all possible lanes for safety
+            for (let lane = 0; lane <= 2; lane++) {
+                if (lane !== currentLane && state.isLaneSafe(lane)) {
+                    bestLane = lane;
+                    break; // Take the first safe lane found
                 }
+            }
+
+            if (bestLane !== null) {
+                const action = bestLane < currentLane ? CAR_ACTIONS.CHANGE_LANE_LEFT : CAR_ACTIONS.CHANGE_LANE_RIGHT;
+                car.executeAction(action);
+                console.log(`Moving to safe lane ${bestLane}`);
+            } else {
+                // No safe lane - emergency measures
+                if (state.car.fuel > 15) {
+                    car.executeAction(CAR_ACTIONS.JUMP);
+                    console.log("No safe lanes - JUMPING!");
+                } else {
+                    car.executeAction(CAR_ACTIONS.BRAKE);
+                    console.log("No fuel for jump - EMERGENCY BRAKE!");
+                }
+            }
+            return; // Skip other actions when avoiding obstacles
+        }
+
+        // Check for obstacles ahead and prepare early
+        const obstaclesAhead = state.getObstaclesAhead();
+        const nearbyObstacles = obstaclesAhead.filter(obs => obs.distance <= 30 && obs.lane === state.car.lane);
+
+        if (nearbyObstacles.length > 0) {
+            const obstacle = nearbyObstacles[0];
+            console.log(`⚠️ Obstacle in ${obstacle.distance}m - preparing lane change`);
+
+            // Prepare for lane change if safe
+            if (state.car.lane > 0 && state.isLaneSafe(state.car.lane - 1)) {
+                car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+            } else if (state.car.lane < 2 && state.isLaneSafe(state.car.lane + 1)) {
+                car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
             }
         }
     }
 
     seekBoostPads(state, car) {
-        // Look for nearby boost pads (yellow zones)
-        for (let i = 0; i < Math.min(2, state.track.ahead.length); i++) {
-            if (state.track.ahead[i].type === 'boost_zone') {
-                const items = state.track.ahead[i].items;
-                if (items && items.length > 0) {
-                    const boostLane = items[0].lane;
-                    if (typeof boostLane === 'number' && boostLane !== state.car.lane && i < 2) {
-                        // Move to boost pad for free +20 km/h
-                        if (boostLane < state.car.lane) {
-                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                        } else {
-                            car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-                        }
-                        console.log("🚀 Moving to boost pad for +20 km/h!");
-                        break;
-                    }
-                }
+        // Use new helper method to check for boost pad in current lane
+        if (state.hasBoostPadAhead()) {
+            console.log("🚀 Boost pad in our lane - maintaining course!");
+            car.executeAction(CAR_ACTIONS.ACCELERATE); // Speed up to collect it
+            return;
+        }
+
+        // Look for nearby boost pads in other lanes
+        const boostPadsAhead = state.getBoostPadsAhead();
+        const nearbyBoosts = boostPadsAhead.filter(boost => boost.distance <= 20);
+
+        for (const boostPad of nearbyBoosts) {
+            if (boostPad.lane !== state.car.lane && state.isLaneSafe(boostPad.lane)) {
+                // Move to boost pad for free +20 km/h
+                const action = boostPad.lane < state.car.lane ?
+                    CAR_ACTIONS.CHANGE_LANE_LEFT : CAR_ACTIONS.CHANGE_LANE_RIGHT;
+                car.executeAction(action);
+                console.log(`🚀 Moving to boost pad in lane ${boostPad.lane} for +20 km/h!`);
+                return;
             }
         }
     }
 
     seekFuelZones(state, car) {
-        // Look for fuel zones - they're only in lanes 1 and 2!
-        for (let i = 0; i < Math.min(3, state.track.ahead.length); i++) {
-            if (state.track.ahead[i].type === 'fuel_zone') {
-                console.log("⛽ Fuel zone ahead! Remember: lanes 1-2 only, refuel at 72L/sec");
-                
-                // Are we in a fuel-accessible lane?
-                if (state.car.lane === 0) {
+        // Use new helper method to check for fuel station in current lane
+        if (state.hasFuelStationAhead()) {
+            console.log("⛽ Fuel station in our lane - slowing down to refuel!");
+            car.executeAction(CAR_ACTIONS.BRAKE);
+            return;
+        }
+
+        // Look for fuel zones in accessible lanes (1 and 2)
+        const fuelStationsAhead = state.getFuelStationsAhead();
+        const nearbyFuel = fuelStationsAhead.filter(station => station.distance <= 30);
+
+        if (nearbyFuel.length > 0) {
+            console.log("⛽ Fuel zone ahead! Remember: lanes 1-2 only, refuel at 72L/sec");
+
+            // Are we in a fuel-accessible lane?
+            if (state.car.lane === 0) {
+                if (state.isLaneSafe(1)) {
                     car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                     console.log("Moving from lane 0 to access fuel zone");
-                    return;
+                } else {
+                    console.log("Lane 1 not safe - cannot access fuel");
                 }
-                
-                // If we're in a fuel zone, slow down to maximize refuel time
-                if (i === 0) {
-                    car.executeAction(CAR_ACTIONS.BRAKE);
-                    console.log("Braking in fuel zone to maximize refuel time");
-                    return;
-                }
-                break;
+                return;
+            }
+
+            // If we're already in lanes 1 or 2, maintain position
+            if (state.car.lane === 1 || state.car.lane === 2) {
+                console.log("In fuel-accessible lane - ready for refuel");
             }
         }
     }
@@ -338,6 +379,13 @@ ADVANCED SYSTEMS:
    - CAR_ACTIONS.ENTER_PIT when near pit entry
    - Full refuel but costs time (~5 seconds)
    - Strategic decision: pit early or risk running out?
+
+1.5. NEW HELPER METHODS FOR ADVANCED PLAY:
+   - state.hasObstacleAhead(): Immediate obstacle detection
+   - state.hasFuelStationAhead(): Fuel station in your lane
+   - state.hasBoostPadAhead(): Boost pad in your lane
+   - state.isLaneSafe(lane): Safe lane change detection
+   - Use these for safer, smarter racing!
 
 2. DATA TRACKING:
    - Lap times

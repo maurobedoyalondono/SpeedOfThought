@@ -6,7 +6,7 @@ class PlayerBot {
         this.debugMode = true; // Turn this on/off to control debug output
         this.tickCount = 0;
         this.lastLap = 1;
-        
+
         console.log("🐛 Lesson 1.5: Learning to debug your racing bot!");
         console.log("💡 Tip: Open your browser's developer console (F12) to see all messages!");
     }
@@ -62,7 +62,7 @@ class PlayerBot {
         console.log("  Lap: " + state.car.lap + " / " + state.track.totalLaps);
         console.log("  Boosts: " + state.car.boosts + " charges remaining");
         console.log("  Drafting: " + (state.car.isDrafting ? "YES (saving fuel!)" : "no"));
-        
+
         // Special states
         if (state.car.isJumping) console.log("  🦘 JUMPING!");
         if (state.car.collisionStun > 0) console.log("  💥 STUNNED for " + state.car.collisionStun + " more ticks");
@@ -71,44 +71,58 @@ class PlayerBot {
 
     logTrackInfo(state) {
         console.log("🛣️ TRACK AHEAD:");
-        
-        // Look at next 3 segments
-        for (let i = 0; i < Math.min(3, state.track.ahead.length); i++) {
-            const segment = state.track.ahead[i];
-            const distance = i * 10; // Rough distance
-            let description = `  Segment +${distance}m: `;
-            
-            if (segment.type === 'fuel_zone') {
-                description += "⛽ FUEL ZONE (lanes 1-2 only)";
-            } else if (segment.type === 'boost_zone') {
-                description += "🚀 BOOST ZONE";
-            } else {
-                description += "normal track";
-            }
-            
-            if (segment.obstacles && segment.obstacles.length > 0) {
-                description += " | 🚧 Obstacles in lanes: ";
-                description += segment.obstacles.map(obs => obs.lane).join(", ");
-            }
-            
-            if (segment.items && segment.items.length > 0) {
-                description += " | 🎁 Items available";
-            }
-            
-            console.log(description);
+
+        // Use new helper methods to get track information
+        const obstacles = state.getObstaclesAhead();
+        const fuelStations = state.getFuelStationsAhead();
+        const boostPads = state.getBoostPadsAhead();
+
+        console.log("  Total items visible: " + obstacles.length + " obstacles, " +
+                    fuelStations.length + " fuel stations, " + boostPads.length + " boost pads");
+
+        // Check what's in our current lane
+        if (state.hasObstacleAhead()) {
+            const nextObstacle = obstacles.find(o => o.lane === state.car.lane);
+            console.log("  ⚠️ OBSTACLE in my lane at " + nextObstacle.distance + "m!");
         }
+
+        if (state.hasFuelStationAhead()) {
+            const nextFuel = fuelStations.find(f => f.lane === state.car.lane);
+            console.log("  ⛽ FUEL STATION in my lane at " + nextFuel.distance + "m!");
+        }
+
+        if (state.hasBoostPadAhead()) {
+            const nextBoost = boostPads.find(b => b.lane === state.car.lane);
+            console.log("  🚀 BOOST PAD in my lane at " + nextBoost.distance + "m!");
+        }
+
+        // Show nearest items
+        if (obstacles.length > 0) {
+            console.log("  Nearest obstacle: Lane " + obstacles[0].lane + " at " + obstacles[0].distance + "m");
+        }
+        if (fuelStations.length > 0) {
+            console.log("  Nearest fuel: Lane " + fuelStations[0].lane + " at " + fuelStations[0].distance + "m");
+        }
+        if (boostPads.length > 0) {
+            console.log("  Nearest boost: Lane " + boostPads[0].lane + " at " + boostPads[0].distance + "m");
+        }
+
+        // Check lane safety
+        console.log("  Lane safety: 0=" + (state.isLaneSafe(0) ? "✅" : "❌") +
+                    " 1=" + (state.isLaneSafe(1) ? "✅" : "❌") +
+                    " 2=" + (state.isLaneSafe(2) ? "✅" : "❌"));
     }
 
     logPerformanceMetrics(state) {
         // Calculate some useful metrics
         const lapProgress = (state.car.position / state.track.lapDistance * 100).toFixed(1);
         const raceProgress = ((state.car.lap - 1) * 100 + parseFloat(lapProgress)) / state.track.totalLaps;
-        
+
         console.log("📊 PERFORMANCE:");
         console.log("  Lap progress: " + lapProgress + "%");
         console.log("  Race progress: " + raceProgress.toFixed(1) + "%");
         console.log("  Time elapsed: " + (this.tickCount / 60).toFixed(1) + " seconds");
-        
+
         // Fuel efficiency
         const expectedFuelUsage = (this.tickCount / 60) * 1.5; // Rough estimate
         const actualFuelUsed = 100 - state.car.fuel;
@@ -164,9 +178,27 @@ class PlayerBot {
     }
 
     demonstrateActions(state, car) {
-        // Simple behavior for demonstration
+        // Simple behavior for demonstration with new helper methods
         console.log("🤔 Decision making...");
 
+        // Check for immediate dangers
+        if (state.hasObstacleAhead()) {
+            console.log("   🚧 Obstacle ahead! Need to change lanes or jump");
+            // For now, just slow down as demonstration
+            car.executeAction(CAR_ACTIONS.BRAKE);
+            return;
+        }
+
+        // Check for opportunities
+        if (state.hasFuelStationAhead() && state.car.fuel < 50) {
+            console.log("   ⛽ Fuel station ahead and we need fuel - maintaining lane");
+        }
+
+        if (state.hasBoostPadAhead()) {
+            console.log("   🚀 Boost pad ahead - maintaining lane to collect it");
+        }
+
+        // Normal fuel-based decisions
         if (state.car.fuel > 70) {
             console.log("   Plenty of fuel - going fast with SPRINT");
             car.executeAction(CAR_ACTIONS.SPRINT);
@@ -185,20 +217,37 @@ class PlayerBot {
     detailedDebugOutput(state) {
         // VERY detailed output - use sparingly!
         console.log("📋 DETAILED DEBUG (Tick " + this.tickCount + "):");
-        console.log("   Current action will be based on fuel level");
-        console.log("   Fuel: " + state.car.fuel + " -> " + 
-                   (state.car.fuel > 70 ? "SPRINT" : 
-                    state.car.fuel > 40 ? "ACCELERATE" : "COAST"));
+
+        // Log all visible items
+        const obstacles = state.getObstaclesAhead();
+        const fuelStations = state.getFuelStationsAhead();
+        const boostPads = state.getBoostPadsAhead();
+
+        console.log("   All obstacles:", obstacles);
+        console.log("   All fuel stations:", fuelStations);
+        console.log("   All boost pads:", boostPads);
+        console.log("   My lane safety:", state.isLaneSafe(state.car.lane));
     }
 
     logDecisionReasoning(state) {
         // Explain WHY the bot makes decisions
         if (this.tickCount % 30 === 0) { // Every 0.5 seconds
             console.log("💭 REASONING:");
-            console.log("   If fuel > 70: Use SPRINT (high fuel, high speed)");
-            console.log("   If fuel 40-70: Use ACCELERATE (balanced approach)");
-            console.log("   If fuel < 40: Use COAST (fuel conservation)");
-            console.log("   Current fuel: " + state.car.fuel.toFixed(1) + " -> Decision logic applies");
+
+            if (state.hasObstacleAhead()) {
+                console.log("   Obstacle detected -> Must avoid");
+            }
+            if (state.hasFuelStationAhead()) {
+                console.log("   Fuel station available -> Consider if needed");
+            }
+            if (state.hasBoostPadAhead()) {
+                console.log("   Boost pad available -> Try to collect");
+            }
+
+            console.log("   Fuel level: " + state.car.fuel.toFixed(1) + " -> " +
+                       (state.car.fuel > 70 ? "Can sprint" :
+                        state.car.fuel > 40 ? "Should accelerate" :
+                        "Must conserve"));
         }
     }
 
@@ -221,7 +270,7 @@ class PlayerBot {
             if (this.performanceHistory.length >= 3) {
                 const recent = this.performanceHistory.slice(-3);
                 const speedTrend = recent[2].speed - recent[0].speed;
-                console.log("📈 Speed trend over last 2 seconds: " + 
+                console.log("📈 Speed trend over last 2 seconds: " +
                            (speedTrend > 0 ? "+" : "") + speedTrend.toFixed(1) + " km/h");
             }
         }
@@ -235,7 +284,7 @@ CONSOLE BASICS:
 
 1. OPENING THE CONSOLE:
    - Chrome/Edge: Press F12, click "Console" tab
-   - Firefox: Press F12, click "Console" tab  
+   - Firefox: Press F12, click "Console" tab
    - Safari: Enable Developer menu, then Develop > Show Console
    - Mobile: Use desktop browser for debugging
 
@@ -275,17 +324,39 @@ COMMON ISSUES TO DEBUG:
 
 3. "My bot crashes into obstacles"
    → Check: Are you looking ahead?
-   → Debug: Log obstacle detection
+   → Debug: Log obstacle detection with state.hasObstacleAhead()
 
 4. "My bot makes weird decisions"
    → Check: Logic conditions and order
    → Debug: Log decision reasoning
 
+DEBUGGING WITH NEW HELPER METHODS:
+
+// Check what's in your current lane
+if (state.hasObstacleAhead()) {
+    console.log("Obstacle in my lane!");
+}
+if (state.hasFuelStationAhead()) {
+    console.log("Fuel station in my lane!");
+}
+if (state.hasBoostPadAhead()) {
+    console.log("Boost pad in my lane!");
+}
+
+// Get detailed information about all items
+const obstacles = state.getObstaclesAhead();
+console.log("All visible obstacles:", obstacles);
+
+// Check if a lane is safe to move to
+if (state.isLaneSafe(1)) {
+    console.log("Middle lane is safe!");
+}
+
 DEBUGGING LEVELS:
 
 Level 1 - Basic: Key events (lap changes, low fuel)
 Level 2 - Detailed: Every second updates
-Level 3 - Verbose: Every action with reasoning  
+Level 3 - Verbose: Every action with reasoning
 Level 4 - Everything: Every tick (use carefully!)
 
 HELPFUL DEBUG PATTERNS:
@@ -331,6 +402,7 @@ ADVANCED DEBUGGING:
 2. OBJECT INSPECTION:
    console.log("Full state:", state);
    console.log("Car object:", state.car);
+   console.log("All obstacles:", state.getObstaclesAhead());
 
 3. TIMING ANALYSIS:
    console.time("decision");

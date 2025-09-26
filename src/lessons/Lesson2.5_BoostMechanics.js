@@ -1,4 +1,4 @@
-// LESSON 2.5: Boost Mechanics and Special Actions  
+// LESSON 2.5: Boost Mechanics and Special Actions
 // Goal: Master boost usage, jumping, and special track elements!
 
 class PlayerBot {
@@ -17,28 +17,27 @@ class PlayerBot {
         // CONCEPT 1: Understanding your resources
         console.log("🔋 Resources - Fuel:", state.car.fuel.toFixed(1), "| Boosts:", state.car.boosts, "| Speed:", state.car.speed);
 
-        // CONCEPT 2: Boost Pads (Yellow zones)
-        // Look for boost pads on the track
-        for (let i = 0; i < state.track.ahead.length; i++) {
-            if (state.track.ahead[i].type === 'boost_zone') {
-                console.log("🚀 BOOST PAD ahead at segment", i, "- gives FREE +20 km/h!");
-                
-                // Are we in the right position to get it?
-                if (i <= 1) { // Close enough to worry about
-                    const boostItems = state.track.ahead[i].items || [];
-                    for (let item of boostItems) {
-                        if (item.lane !== state.car.lane) {
-                            console.log("Boost pad in lane", item.lane, "- changing lanes!");
-                            if (item.lane < state.car.lane) {
-                                car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
-                            } else {
-                                car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
-                            }
-                            return; // Lane change takes priority
-                        }
+        // CONCEPT 2: Boost Pads (Yellow zones) - Using new helper methods!
+        const boostPads = state.getBoostPadsAhead();
+        if (boostPads.length > 0) {
+            console.log("🚀 Found", boostPads.length, "boost pads ahead!");
+            const nearestBoost = boostPads[0];
+            console.log("Nearest boost pad in lane", nearestBoost.lane, "at", nearestBoost.distance, "m");
+
+            // Check if there's a boost pad in our lane
+            if (state.hasBoostPadAhead()) {
+                console.log("Boost pad in MY lane! Will get +20 km/h for FREE!");
+            } else if (nearestBoost.distance < 50) {
+                // Consider changing lanes to get the boost
+                if (state.isLaneSafe(nearestBoost.lane)) {
+                    console.log("Changing to lane", nearestBoost.lane, "to get boost pad!");
+                    if (nearestBoost.lane < state.car.lane) {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT);
+                    } else {
+                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT);
                     }
+                    return;
                 }
-                break;
             }
         }
 
@@ -48,177 +47,146 @@ class PlayerBot {
             // When should you boost?
             let shouldBoost = false;
 
-            // Scenario A: Low speed and need acceleration
-            if (state.car.speed < 100) {
+            // Scenario 1: Clear track ahead - good for boosting
+            if (!state.hasObstacleAhead() && state.car.speed < 250) {
                 shouldBoost = true;
-                console.log("🚀 BOOST: Low speed acceleration");
-            }
-            // Scenario B: Final lap sprint
-            else if (state.car.lap === state.track.totalLaps && state.car.fuel > 20) {
-                shouldBoost = true;
-                console.log("🚀 BOOST: Final lap sprint!");
-            }
-            // Scenario C: Have excess boosts
-            else if (state.car.boosts > 2) {
-                shouldBoost = true;
-                console.log("🚀 BOOST: Using excess boost charges");
+                console.log("Clear track - good time to boost!");
             }
 
-            if (shouldBoost && state.car.fuel > 15) { // Need fuel for boost
-                car.executeAction(CAR_ACTIONS.BOOST);
-                this.boostCooldown = 10; // Wait before next boost
+            // Scenario 2: After getting a boost pad for combo effect
+            if (state.car.speed > 200 && state.car.speed < 280) {
+                shouldBoost = true;
+                console.log("Good speed for boost combo!");
+            }
+
+            // Scenario 3: Final lap sprint
+            if (state.car.lap === state.track.totalLaps && state.car.fuel > 30) {
+                shouldBoost = true;
+                console.log("Final lap - using boost!");
+            }
+
+            if (shouldBoost) {
+                car.executeAction(CAR_ACTIONS.USE_BOOST);
+                this.boostCooldown = 30; // Prevent spam
                 this.boostUsageLog.push({
                     lap: state.car.lap,
-                    speed: state.car.speed,
-                    fuel: state.car.fuel
+                    position: state.car.position,
+                    speed: state.car.speed
                 });
-                return; // Don't do other actions
+                console.log("💨 BOOST ACTIVATED! Speed will increase by 30 km/h!");
+                return;
             }
         }
 
-        // CONCEPT 4: Jumping over obstacles
-        // Check for obstacles we might want to jump over
-        if (state.track.ahead[0].obstacles && state.track.ahead[0].obstacles.length > 0) {
-            const obstacle = state.track.ahead[0].obstacles[0];
-            
-            if (obstacle.lane === state.car.lane && this.jumpCooldown === 0) {
-                // Should we jump or change lanes?
-                if (state.car.fuel > 20) { // Have enough fuel to jump (costs 5L)
-                    console.log("⬆️ JUMPING over obstacle! Costs 5L fuel but saves time");
-                    car.executeAction(CAR_ACTIONS.JUMP);
-                    this.jumpCooldown = 15; // Can't jump again immediately
-                    return;
-                } else {
-                    console.log("⚠️ Low fuel - changing lanes instead of jumping");
-                    // Change lanes (free but takes time)
-                    if (state.car.lane === 1) {
-                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_LEFT); // Go to lane 0
-                    } else {
-                        car.executeAction(CAR_ACTIONS.CHANGE_LANE_RIGHT); // Go to safer lane
-                    }
-                    return;
-                }
+        // CONCEPT 4: Jumping mechanics
+        const obstacles = state.getObstaclesAhead();
+        if (state.hasObstacleAhead() && this.jumpCooldown === 0) {
+            const obstacleInLane = obstacles.find(o => o.lane === state.car.lane);
+            if (obstacleInLane && obstacleInLane.distance < 30) {
+                console.log("🦘 JUMPING over obstacle!");
+                car.executeAction(CAR_ACTIONS.JUMP);
+                this.jumpCooldown = 60; // 1 second cooldown
+                return;
             }
         }
 
-        // CONCEPT 5: Speed management based on situation
-        // Choose action based on current state
-        if (state.car.fuel > 70) {
-            // Plenty of fuel - go fast!
+        // CONCEPT 5: Drafting (following other cars closely)
+        if (state.car.isDrafting) {
+            console.log("📉 DRAFTING! Using 30% less fuel while maintaining speed!");
+        }
+
+        // CONCEPT 6: Strategic decision making with all elements
+        // Check track conditions and make smart decisions
+        const fuelStations = state.getFuelStationsAhead();
+        const hasLowFuel = state.car.fuel < 40;
+        const needsFuel = hasLowFuel && fuelStations.length > 0;
+
+        if (needsFuel) {
+            // Navigate to fuel station
+            const targetFuel = fuelStations[0];
+            if (targetFuel.lane !== state.car.lane && state.isLaneSafe(targetFuel.lane)) {
+                console.log("Moving to lane", targetFuel.lane, "for fuel");
+                car.executeAction(targetFuel.lane < state.car.lane ?
+                    CAR_ACTIONS.CHANGE_LANE_LEFT : CAR_ACTIONS.CHANGE_LANE_RIGHT);
+                return;
+            }
+        }
+
+        // Default driving behavior based on fuel
+        if (state.car.fuel > 60 && !state.hasObstacleAhead()) {
             car.executeAction(CAR_ACTIONS.SPRINT);
-        } else if (state.car.fuel > 40) {
-            // Normal racing
+        } else if (state.car.fuel > 30) {
             car.executeAction(CAR_ACTIONS.ACCELERATE);
-        } else if (state.car.fuel > 20) {
-            // Conserve fuel
-            car.executeAction(CAR_ACTIONS.COAST);
         } else {
-            // Critical fuel - maximum conservation
             car.executeAction(CAR_ACTIONS.COAST);
         }
 
-        // CHALLENGE 1: Track boost usage
-        // if (this.boostUsageLog.length > 0 && state.car.lap > 1) {
-        //     console.log("Boost usage history:", this.boostUsageLog.length, "boosts used");
-        // }
+        // CHALLENGE 1: Boost pad collection efficiency
+        // Try to collect at least 3 boost pads per lap!
 
-        // CHALLENGE 2: Jump vs lane change decision
-        // if (obstacle && obstacle.lane === state.car.lane) {
-        //     const fuelCost = 5; // Jump costs 5L
-        //     const timeCost = 5 * (1000/60); // Lane change takes ~5 ticks
-        //     console.log("Decision: Jump (", fuelCost, "L fuel) vs Lane Change (", timeCost.toFixed(0), "ms)");
-        // }
+        // CHALLENGE 2: Combo boosting
+        // Use manual boost right after collecting a boost pad for maximum speed!
 
-        // CHALLENGE 3: Boost pad planning
-        // Look ahead for multiple boost pads and plan route
-        // let boostPadsAhead = 0;
-        // for (let i = 0; i < state.track.ahead.length; i++) {
-        //     if (state.track.ahead[i].type === 'boost_zone') {
-        //         boostPadsAhead++;
-        //     }
-        // }
-        // console.log("Boost pads visible ahead:", boostPadsAhead);
+        // CHALLENGE 3: Jump timing
+        // Can you jump over obstacles while maintaining maximum speed?
+
+        // CHALLENGE 4: Fuel-boost balance
+        // Complete the race using all your boosts but still having fuel left!
     }
 }
 
 /*
-LESSON 2.5 CONCEPTS:
+LESSON 2.5: SPECIAL MECHANICS
 
-BOOST MECHANICS:
+BOOST PADS (Yellow Zones):
+- Give +20 km/h instantly for FREE
+- No fuel cost
+- Stack with manual boosts
+- Located in specific lanes
+- Use getBoostPadsAhead() to find them!
 
-1. BOOST CHARGES:
-   - Limited resource (usually 2-3 per race)
-   - CAR_ACTIONS.BOOST gives +20 km/h acceleration per tick
-   - Uses fuel in addition to boost charge
-   - Max speed increased to 300 km/h during boost
+MANUAL BOOSTS:
+- Use CAR_ACTIONS.USE_BOOST
+- Gives +30 km/h instantly
+- Costs 5L fuel
+- You start with 3 charges
+- Best used on straight sections
 
-2. BOOST PADS (Yellow zones):
-   - Free speed bonus (+20 km/h instant)
-   - Must drive through them (change lanes if needed)
-   - Don't cost fuel or boost charges
-   - Great for maintaining high speed
+JUMPING:
+- Use CAR_ACTIONS.JUMP
+- Costs 10L fuel
+- Avoid obstacles without changing lanes
+- 1 second cooldown
+- Maintains your speed
 
-JUMPING MECHANICS:
+DRAFTING:
+- Follow another car closely
+- Reduces fuel consumption by 30%
+- Automatic when behind another car
+- Check with state.car.isDrafting
 
-1. JUMP ACTION:
-   - CAR_ACTIONS.JUMP lasts 10 ticks
-   - Costs 5L fuel
-   - Can jump over any obstacle
-   - Works from any lane
-   - Can't change lanes while jumping
+NEW HELPER METHODS FOR SPECIAL ACTIONS:
+- state.getBoostPadsAhead() - Find all boost pads
+- state.hasBoostPadAhead() - Check if boost pad in your lane
+- state.getObstaclesAhead() - Find all obstacles
+- state.hasObstacleAhead() - Check if obstacle in your lane
+- state.isLaneSafe(lane) - Check if you can change lanes safely
 
-2. JUMP STRATEGY:
-   - Jump when fuel is plentiful
-   - Change lanes when fuel is low
-   - Jump saves time but costs fuel
-   - Lane changes are free but take time
+STRATEGIC TIPS:
+1. Boost pads are FREE - always try to get them!
+2. Save manual boosts for the final lap
+3. Jump only when necessary (it costs fuel)
+4. Combine boost pad + manual boost for super speed
+5. Draft behind opponents to save fuel
 
-RESOURCE MANAGEMENT:
+ADVANCED STRATEGY:
+- Boost pad at 200 km/h → 220 km/h
+- Then manual boost → 250 km/h
+- Maximum efficiency!
 
-1. FUEL PRIORITIES:
-   - 1. Survival (basic movement)
-   - 2. Obstacle avoidance
-   - 3. Boost usage
-   - 4. Jump actions
-
-2. BOOST PRIORITIES:
-   - 1. Emergency acceleration
-   - 2. Final lap sprint
-   - 3. Overtaking opportunities
-   - 4. Using excess boosts
-
-TRACK READING:
-
-1. YELLOW ZONES = Boost pads (free speed)
-2. GREEN ZONES = Fuel zones (refuel)
-3. ORANGE CONES = Obstacles (avoid/jump)
-4. Plan route to collect boosts efficiently
-
-STRATEGIC DECISIONS:
-
-Q: Should I jump or change lanes?
-A: Jump if fuel > 20L, change lanes if fuel < 20L
-
-Q: When should I use boost charges?
-A: Final lap, low speed situations, or when you have extras
-
-Q: Are boost pads worth changing lanes for?
-A: Yes! Free +20 km/h is always worth a lane change
-
-ADVANCED TIPS:
-
-1. Boost pads stack with boost charges
-2. Jumping gives invincibility during obstacles
-3. Plan boost pad routes in advance
-4. Save one boost for emergencies
-5. Use boosts when fuel is plentiful
-
-EXPERIMENT:
-1. Try completing a race without using any boosts
-2. Try jumping over every obstacle vs avoiding them
-3. Collect every boost pad you see
-4. Use all boosts on the final lap
-
-Remember: Special actions are tools in your toolkit - 
-use them wisely based on the situation!
+PHYSICS NOTES:
+- Max speed: 300 km/h
+- Boost effects are instant
+- Speed decays naturally over time
+- Higher speeds = more fuel consumption
 */
